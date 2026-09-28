@@ -1,0 +1,116 @@
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import {
+  Alert,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import AppButton from './src/components/AppButton';
+import { colors, spacing } from './src/constants/theme';
+
+export default function App() {
+  function showTestMessage() {
+    Alert.alert(
+      'Button working',
+      'Your reusable button received the tap.',
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <ExpoStatusBar style="dark" />
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
+          <Text accessibilityRole="header" style={styles.heading}>
+            Button preview
+          </Text>
+
+          <Text style={styles.description}>
+            Test each state before we use these buttons in your screens.
+          </Text>
+
+          <View style={styles.example}>
+            <Text style={styles.label}>Primary</Text>
+            <AppButton
+              title="Continue"
+              onPress={showTestMessage}
+            />
+          </View>
+
+          <View style={styles.example}>
+            <Text style={styles.label}>Secondary</Text>
+            <AppButton
+              title="Go back"
+              variant="secondary"
+              onPress={showTestMessage}
+            />
+          </View>
+
+          <View style={styles.example}>
+            <Text style={styles.label}>Disabled — should not respond</Text>
+            <AppButton
+              title="Save pet"
+              disabled
+              onPress={showTestMessage}
+            />
+          </View>
+
+          <View style={styles.example}>
+            <Text style={styles.label}>Loading — should not respond</Text>
+            <AppButton
+              title="Saving..."
+              loading
+              onPress={showTestMessage}
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop:
+      (Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0) +
+      spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 56,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  heading: {
+    color: colors.forest,
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: spacing.md,
+  },
+  description: {
+    color: colors.mutedText,
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: spacing.xxl,
+  },
+  example: {
+    marginBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  label: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

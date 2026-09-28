@@ -1,0 +1,437 @@
+import { useState } from 'react';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import {
+  Image,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import { colors, spacing } from './src/constants/theme';
+
+const careFeatures = [
+  {
+    number: '01',
+    title: 'Every pet, their own space',
+    description:
+      'Keep their personality, little details, and care needs together.',
+  },
+  {
+    number: '02',
+    title: 'Care you can keep track of',
+    description:
+      'A home for health records, vaccinations, and medication reminders.',
+  },
+  {
+    number: '03',
+    title: 'Their next visit, organised',
+    description:
+      'Keep appointments and vet details close when you need them.',
+  },
+];
+
+export default function App() {
+  const [photoWidth, setPhotoWidth] = useState(0);
+
+  const photoHeight = photoWidth * (2 / 3);
+
+  return (
+    <View style={styles.screen}>
+      <ExpoStatusBar style="dark" />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.brand}>petcare.</Text>
+              <Text style={styles.brandCaption}>FOR THE LOVE OF PETS</Text>
+            </View>
+
+            <View style={styles.headerBadge}>
+              <View style={styles.badgeDot} />
+              <Text style={styles.headerBadgeText}>A little love, daily</Text>
+            </View>
+          </View>
+
+          <View style={styles.introduction}>
+            <Text style={styles.eyebrow}>
+              THEIR HAPPIEST LIFE STARTS HERE
+            </Text>
+
+            <Text accessibilityRole="header" style={styles.headline}>
+              Little paws.{'\n'}
+              <Text style={styles.headlineAccent}>
+                A whole lot of love.
+              </Text>
+            </Text>
+
+            <Text style={styles.introText}>
+              Make room for more happy moments. Keep their everyday care
+              beautifully organised.
+            </Text>
+          </View>
+
+          <View style={styles.heroCard}>
+            <View
+              style={[
+                styles.photoFrame,
+                { height: photoHeight },
+              ]}
+              onLayout={(event) => {
+                const measuredWidth = event.nativeEvent.layout.width;
+
+                setPhotoWidth((previousWidth) =>
+                  previousWidth === measuredWidth
+                    ? previousWidth
+                    : measuredWidth,
+                );
+              }}
+            >
+              {photoWidth > 0 && (
+                <Image
+                  source={require('./assets/images/pets-hero.png')}
+                  style={{
+                    width: photoWidth,
+                    height: photoHeight,
+                  }}
+                  resizeMode="contain"
+                  accessible
+                  accessibilityLabel="A golden retriever and a kitten resting together on a sage cushion"
+                />
+              )}
+            </View>
+
+            <View style={styles.heroCaption}>
+              <View style={styles.captionAccent} />
+
+              <View style={styles.captionContent}>
+                <Text style={styles.captionTitle}>
+                  Family comes in all sizes.
+                </Text>
+                <Text style={styles.captionDescription}>
+                  And every one deserves a little extra care.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.carePanel}>
+            <Text style={styles.panelEyebrow}>
+              LESS TO REMEMBER. MORE TO LOVE.
+            </Text>
+
+            <Text accessibilityRole="header" style={styles.panelTitle}>
+              Their world.{'\n'}All together.
+            </Text>
+
+            <Text style={styles.panelDescription}>
+              From everyday routines to important checkups, give their care a
+              place to call home.
+            </Text>
+
+            <View style={styles.tags}>
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>Profiles</Text>
+              </View>
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>Health</Text>
+              </View>
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>Visits</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.sectionHeading}>
+            <Text style={styles.eyebrow}>THOUGHTFULLY CONNECTED</Text>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>
+              Good care, made simpler.
+            </Text>
+          </View>
+
+          <View style={styles.featureList}>
+            {careFeatures.map((feature, index) => (
+              <View
+                key={feature.number}
+                style={[
+                  styles.featureRow,
+                  index < careFeatures.length - 1 && styles.featureBorder,
+                ]}
+              >
+                <View style={styles.featureNumberCircle}>
+                  <Text style={styles.featureNumber}>
+                    {feature.number}
+                  </Text>
+                </View>
+
+                <View style={styles.featureContent}>
+                  <Text style={styles.featureTitle}>
+                    {feature.title}
+                  </Text>
+                  <Text style={styles.featureDescription}>
+                    {feature.description}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.footer}>
+            <View style={styles.footerLine} />
+            <Text style={styles.footerText}>
+              A little care makes a beautiful difference.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop:
+      (Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0) +
+      spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 56,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: 38,
+  },
+  brand: {
+    color: colors.forest,
+    fontSize: 29,
+    fontWeight: '800',
+    letterSpacing: -1.4,
+  },
+  brandCaption: {
+    color: colors.mutedText,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 3,
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: colors.paleSage,
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  headerBadgeText: {
+    color: colors.forest,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  introduction: {
+    marginBottom: spacing.xl,
+  },
+  eyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: spacing.md,
+  },
+  headline: {
+    color: colors.text,
+    fontSize: 38,
+    lineHeight: 45,
+    fontWeight: '800',
+    letterSpacing: -1.6,
+  },
+  headlineAccent: {
+    color: colors.primary,
+  },
+  introText: {
+    color: colors.mutedText,
+    fontSize: 15,
+    lineHeight: 24,
+    marginTop: spacing.lg,
+    maxWidth: 400,
+  },
+  heroCard: {
+    backgroundColor: colors.card,
+    borderRadius: 26,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
+  },
+  photoFrame: {
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+  },
+  heroCaption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  captionAccent: {
+    width: 4,
+    height: 36,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+  },
+  captionContent: {
+    flex: 1,
+  },
+  captionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  captionDescription: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 3,
+  },
+  carePanel: {
+    backgroundColor: colors.forest,
+    borderRadius: 26,
+    padding: spacing.xl,
+    marginBottom: 36,
+  },
+  panelEyebrow: {
+    color: colors.onForestMuted,
+    fontSize: 9,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    marginBottom: spacing.lg,
+  },
+  panelTitle: {
+    color: colors.onForest,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+  },
+  panelDescription: {
+    color: colors.onForestMuted,
+    fontSize: 14,
+    lineHeight: 23,
+    marginTop: spacing.md,
+  },
+  tags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  tag: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  tagText: {
+    color: colors.onForest,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sectionHeading: {
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: '700',
+    letterSpacing: -0.7,
+  },
+  featureList: {
+    marginTop: spacing.sm,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  featureBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  featureNumberCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.paleSage,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureNumber: {
+    color: colors.forest,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  featureContent: {
+    flex: 1,
+  },
+  featureTitle: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '700',
+    marginBottom: 5,
+  },
+  featureDescription: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 21,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
+  footerLine: {
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+    marginBottom: spacing.lg,
+  },
+  footerText: {
+    color: colors.mutedText,
+    fontSize: 11,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+});
