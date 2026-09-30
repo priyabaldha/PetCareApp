@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "PetCareApp",
-    "slug": "PetCareApp",
+    "name": "JEEVA",
+    "slug": "JEEVA",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/jeeva.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
@@ -16,10 +16,16 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.aayutp.JEEVA"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0bb3b1b4-d3bf-48f5-ba94-2a8ad6dea90e"
+      }
     }
   }
 }
