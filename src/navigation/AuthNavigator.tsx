@@ -7,13 +7,13 @@ import SignupScreen from '../screens/auth/SignupScreen';
 import type { AuthStackParamList } from '../types/navigation';
 
 interface AuthNavigatorProps {
-  onDemoLogin: () => void;
+  onLoginSuccess: () => void;
 }
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export default function AuthNavigator({
-  onDemoLogin,
+  onLoginSuccess,
 }: AuthNavigatorProps) {
   return (
     <Stack.Navigator
@@ -29,7 +29,7 @@ export default function AuthNavigator({
         {(props) => (
           <LoginScreen
             {...props}
-            onDemoLogin={onDemoLogin}
+            onLoginSuccess={onLoginSuccess}
           />
         )}
       </Stack.Screen>

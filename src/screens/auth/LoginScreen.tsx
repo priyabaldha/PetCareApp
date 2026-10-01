@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
+  Alert,
   Image,
   Keyboard,
   Pressable,
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { login } from '../../services/auth';
 import AppInput from '../../components/AppInput';
 import type { AuthStackParamList } from '../../types/navigation';
 
@@ -19,7 +21,7 @@ type LoginScreenProps = NativeStackScreenProps<
   AuthStackParamList,
   'Login'
 > & {
-  onDemoLogin: () => void;
+  onLoginSuccess: () => void;
 };
 
 const COLORS = {
@@ -41,12 +43,14 @@ const COLORS = {
 
 export default function LoginScreen({
   navigation,
-  onDemoLogin,
+  onLoginSuccess,
 }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const busy = useRef(false);
 
   const emailError =
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
@@ -56,22 +60,29 @@ export default function LoginScreen({
   const passwordError =
     password.length > 0 ? '' : 'Enter your password.';
 
-  function handleContinue() {
+  async function handleContinue(): Promise<void> {
+    if (busy.current) return;
     setSubmitted(true);
-
-    if (emailError || passwordError) {
-      return;
-    }
-
+    if (emailError || passwordError) return;
     Keyboard.dismiss();
-    onDemoLogin();
+    busy.current = true;
+    setIsLoading(true);
+    try {
+      await login(email, password);
+    } catch (error) {
+      Alert.alert('Unable to sign in', error instanceof Error ? error.message : 'Please try again.');
+      return;
+    } finally {
+      busy.current = false;
+      setIsLoading(false);
+    }
+    setPassword('');
+    onLoginSuccess();
   }
 
   function handleGoogleLogin() {
     Keyboard.dismiss();
-
-    // Connect Google authentication here later.
-    onDemoLogin();
+    Alert.alert('Google sign-in', 'Google sign-in is not connected yet. Use your email and password.');
   }
 
   return (
@@ -223,11 +234,13 @@ export default function LoginScreen({
                 styles.continueButton,
                 pressed && styles.pressed,
               ]}
+              disabled={isLoading}
+              accessibilityState={{ disabled: isLoading, busy: isLoading }}
               onPress={handleContinue}
               accessibilityRole="button"
             >
               <Text style={styles.continueText}>
-                Continue
+                {isLoading ? 'Signing in...' : 'Continue'}
               </Text>
 
               <View style={styles.arrowCircle}>
@@ -256,6 +269,7 @@ export default function LoginScreen({
                 styles.googleButton,
                 pressed && styles.pressed,
               ]}
+              disabled={isLoading}
               onPress={handleGoogleLogin}
               accessibilityRole="button"
               accessibilityLabel="Continue with Google"

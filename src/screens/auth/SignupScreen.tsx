@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -15,6 +15,19 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import AppInput from '../../components/AppInput';
 import type { AuthStackParamList } from '../../types/navigation';
+
+// Replace YOUR_COMPUTER_WIFI_IP with the IPv4 address from ipconfig.
+// Local development only; use HTTPS for a deployed backend.
+const API_BASE_URL = 'http://192.168.1.40:4000';
+
+function utf8Length(value: string): number {
+  let bytes = 0;
+  for (const character of value) {
+    const point = character.codePointAt(0)!;
+    bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+  }
+  return bytes;
+}
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Signup'>;
 
@@ -39,24 +52,31 @@ export default function SignupScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
+  const [showPassword] = useState(false);
+  const [showConfirmPassword] =
     useState(false);
 
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const requestInFlight = useRef(false);
 
   const errors = {
-    name: name.trim() ? '' : 'Enter your name.',
+    name: name.trim().length >= 2 && name.trim().length <= 100
+      ? ''
+      : 'Use between 2 and 100 characters for your name.',
 
     email:
+      email.trim().length <= 254 &&
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
         ? ''
         : 'Enter a valid email address.',
 
     password:
-      password.length >= 8
-        ? ''
-        : 'Use at least 8 characters.',
+      password.length < 8
+        ? 'Use at least 8 characters.'
+        : utf8Length(password) > 72
+          ? 'Password is too long (maximum 72 UTF-8 bytes).'
+          : '',
 
     confirmPassword: !confirmPassword
       ? 'Confirm your password.'
@@ -65,25 +85,82 @@ export default function SignupScreen({ navigation }: Props) {
         : '',
   };
 
-  function handleSignup() {
+  async function handleSignup(): Promise<void> {
+    if (requestInFlight.current) return;
     setSubmitted(true);
 
-    if (Object.values(errors).some(Boolean)) {
+    if (Object.values(errors).some(Boolean)) return;
+    Keyboard.dismiss();
+
+    if (API_BASE_URL.includes('YOUR_COMPUTER_WIFI_IP')) {
+      Alert.alert(
+        'Backend address needed',
+        'Replace YOUR_COMPUTER_WIFI_IP near the top of SignupScreen.tsx with your computer’s Wi-Fi IPv4 address.',
+      );
       return;
     }
 
-    Keyboard.dismiss();
+    requestInFlight.current = true;
+    setIsSubmitting(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-    Alert.alert(
-      'Signup preview complete',
-      'Your details passed validation. No account has been created yet.',
-      [
-        {
-          text: 'Back to login',
-          onPress: () => navigation.popToTop(),
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
-      ],
-    );
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+        signal: controller.signal,
+      });
+
+      const payload: unknown = await response.json().catch(() => null);
+      const data = payload !== null && typeof payload === 'object'
+        ? payload as Record<string, unknown>
+        : null;
+
+      if (!response.ok) {
+        Alert.alert(
+          response.status === 409 ? 'Email already registered' : 'Signup failed',
+          typeof data?.message === 'string'
+            ? data.message
+            : `The server returned an error (${response.status}). Please try again.`,
+        );
+        return;
+      }
+
+      if (response.status !== 201 || data?.success !== true) {
+        Alert.alert(
+          'Unexpected response',
+          'Account creation could not be confirmed. Check MongoDB Compass before trying again.',
+        );
+        return;
+      }
+
+      setPassword('');
+      setConfirmPassword('');
+      setSubmitted(false);
+      Alert.alert(
+        'Account created',
+        'Your JEEVA account has been created successfully.',
+        [{ text: 'Back to login', onPress: () => navigation.popToTop() }],
+      );
+    } catch {
+      Alert.alert(
+        controller.signal.aborted ? 'Request timed out' : 'Connection problem',
+        'Could not confirm account creation. Keep the backend running and check your Wi-Fi connection and backend address. Check MongoDB Compass before retrying; the account may already have been saved.',
+      );
+    } finally {
+      clearTimeout(timeout);
+      requestInFlight.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   function handleGoogleSignup() {
@@ -276,10 +353,12 @@ export default function SignupScreen({ navigation }: Props) {
                 pressed && styles.pressed,
               ]}
               onPress={handleSignup}
+              disabled={isSubmitting}
+              accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
               accessibilityRole="button"
             >
               <Text style={styles.createButtonText}>
-                Create account
+                {isSubmitting ? 'Creating account...' : 'Create account'}
               </Text>
 
               <View style={styles.arrowCircle}>
@@ -314,6 +393,7 @@ export default function SignupScreen({ navigation }: Props) {
                 styles.googleButton,
                 pressed && styles.pressed,
               ]}
+              disabled={isSubmitting}
               onPress={handleGoogleSignup}
               accessibilityRole="button"
             >
@@ -340,6 +420,7 @@ export default function SignupScreen({ navigation }: Props) {
               </Text>
 
               <Pressable
+                disabled={isSubmitting}
                 onPress={() => {
                   Keyboard.dismiss();
                   navigation.goBack();

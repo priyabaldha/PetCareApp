@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Button, Text, View } from 'react-native';
+import { restoreSession } from '../services/auth';
 import { StatusBar } from 'expo-status-bar';
 import {
   DefaultTheme,
@@ -50,6 +52,47 @@ const navigationTheme: Theme = {
 export default function RootNavigator() {
   const [launchStage, setLaunchStage] =
     useState<LaunchStage>('splash');
+  const [splashDone, setSplashDone] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [sessionError, setSessionError] = useState('');
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setSessionReady(false);
+    setSessionError('');
+    restoreSession().then((valid) => {
+      if (!active) return;
+      setHasSession(valid);
+      setSessionReady(true);
+    }).catch((error: unknown) => {
+      if (active) setSessionError(error instanceof Error ? error.message : 'Could not check your session.');
+    });
+    return () => { active = false; };
+  }, [retry]);
+
+  useEffect(() => {
+    if (splashDone && sessionReady) {
+      setLaunchStage(hasSession ? 'main' : 'onboarding');
+    }
+  }, [splashDone, sessionReady, hasSession]);
+
+  if (launchStage === 'splash' && splashDone) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, backgroundColor: colors.background }}>
+        <StatusBar style="dark" />
+        {sessionError ? (
+          <>
+            <Text style={{ color: colors.text, textAlign: 'center', marginBottom: 16 }}>{sessionError}</Text>
+            <Button title="Retry connection" onPress={() => setRetry((value) => value + 1)} />
+            <Button title="Go to sign in" onPress={() => setLaunchStage('auth')} />
+          </>
+        ) : <ActivityIndicator color={colors.primary} size="large" />}
+      </View>
+    );
+  }
+
 
   /* ==========================================
      SPLASH SCREEN
@@ -69,7 +112,7 @@ export default function RootNavigator() {
 
         <SplashScreen
           onComplete={() =>
-            setLaunchStage('onboarding')
+            setSplashDone(true)
           }
         />
       </>
@@ -107,7 +150,7 @@ export default function RootNavigator() {
       >
         {launchStage === 'auth' ? (
           <AuthNavigator
-            onDemoLogin={() =>
+            onLoginSuccess={() =>
               setLaunchStage('main')
             }
           />
