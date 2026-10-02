@@ -1,5 +1,11 @@
-import React from 'react';
+import { usePetCount } from '../../hooks/usePetData';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { getCurrentUser, logout } from '../../services/auth';
+import type { AuthUser } from '../../services/auth';
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,7 +16,75 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function ProfileScreen() {
+interface ProfileScreenProps {
+  onLoggedOut: () => void;
+}
+
+export default function ProfileScreen({ onLoggedOut }: ProfileScreenProps) {
+  const petCount = usePetCount();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const busy = useRef(false);
+  const mounted = useRef(true);
+  const requestVersion = useRef(0);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const version = ++requestVersion.current;
+    setLoading(true);
+    setError('');
+    setUser(null);
+    getCurrentUser().then((currentUser) => {
+      if (!active || version !== requestVersion.current) return;
+      if (!currentUser) {
+        onLoggedOut();
+        return;
+      }
+      setUser(currentUser);
+    }).catch((failure: unknown) => {
+      if (active && version === requestVersion.current) {
+        setError(failure instanceof Error ? failure.message : 'Could not load your profile.');
+      }
+    }).finally(() => {
+      if (active && version === requestVersion.current) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [onLoggedOut, retry]));
+
+  async function handleLogout(): Promise<void> {
+    if (busy.current) return;
+    busy.current = true;
+    setLoggingOut(true);
+    ++requestVersion.current;
+    try {
+      // Revoke the server session, then delete the phone token.
+      await logout();
+    } catch (failure) {
+      if (mounted.current) {
+        Alert.alert('Could not log out', failure instanceof Error ? failure.message : 'Please try again.');
+        setLoggingOut(false);
+        setRetry((value) => value + 1);
+      }
+      busy.current = false;
+      return;
+    }
+    if (mounted.current) {
+      setUser(null);
+      onLoggedOut();
+    }
+  }
+
+  const initials = user?.name.trim().split(/\s+/).slice(0, 2)
+    .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '🐾';
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView
@@ -39,17 +113,17 @@ export default function ProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.profileAvatar}>
             <Text style={styles.profileEmoji}>
-              👩🏻
+              {initials}
             </Text>
           </View>
 
           <View style={styles.profileInfo}>
             <Text style={styles.name}>
-              Aayushi
+              {user?.name ?? (loading ? 'Loading profile...' : 'Profile unavailable')}
             </Text>
 
             <Text style={styles.email}>
-              aayushi@example.com
+              {user?.email ?? ''}
             </Text>
 
             <View style={styles.memberBadge}>
@@ -74,6 +148,17 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
+        {loading && <ActivityIndicator color="#7057A5" style={{ marginTop: 12 }} />}
+        {!!error && (
+          <View style={{ marginTop: 12 }}>
+            <Text accessibilityRole="alert" style={{ color: '#C45B45' }}>{error}</Text>
+            <Pressable disabled={loggingOut} onPress={() => setRetry((value) => value + 1)}
+              accessibilityRole="button" style={{ paddingVertical: 12 }}>
+              <Text style={{ color: '#7057A5', fontWeight: '700' }}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* PET SUMMARY */}
 
         <Text style={styles.sectionTitle}>
@@ -82,26 +167,34 @@ export default function ProfileScreen() {
 
         <View style={styles.summaryRow}>
           <Summary
-            number="2"
+            number={petCount.data === null ? "—" : String(petCount.data)}
             label="Pets"
             emoji="🐾"
             background="#E8E0F5"
           />
 
           <Summary
-            number="5"
+            number="—"
             label="Vaccines"
             emoji="💉"
             background="#FFE3DF"
           />
 
           <Summary
-            number="3"
+            number="—"
             label="Appointments"
             emoji="📅"
             background="#DDEEFF"
           />
         </View>
+
+        <Text style={{ color: '#929087', fontSize: 10, marginTop: 8 }}>
+          Vaccine and appointment totals will appear when those features are connected.
+        </Text>
+
+        {!!petCount.error && <Pressable onPress={petCount.refresh} accessibilityRole="button" style={{ paddingVertical: 12 }}>
+          <Text style={{ color: '#C45B45', fontSize: 11 }}>Could not load pet count. Tap to retry.</Text>
+        </Pressable>}
 
         {/* SETTINGS */}
 
@@ -249,7 +342,10 @@ export default function ProfileScreen() {
 
         </View>
 
-        <Pressable style={styles.logoutButton}>
+        <Pressable style={styles.logoutButton}
+          onPress={handleLogout} disabled={loggingOut}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loggingOut, busy: loggingOut }}>
           <Ionicons
             name="log-out-outline"
             size={19}
@@ -257,7 +353,7 @@ export default function ProfileScreen() {
           />
 
           <Text style={styles.logoutText}>
-            Log out
+            {loggingOut ? 'Logging out...' : 'Log out'}
           </Text>
         </Pressable>
 

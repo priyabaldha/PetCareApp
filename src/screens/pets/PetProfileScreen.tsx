@@ -1,17 +1,41 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import AppButton from '../../components/AppButton';
 import AppCard from '../../components/AppCard';
-import { demoPets } from '../../constants/demoPets';
+import { usePet } from '../../hooks/usePetData';
+import { deletePet } from '../../services/pets';
 import { colors } from '../../constants/theme';
 import type { RootStackParamList } from '../../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PetProfile'>;
 
 export default function PetProfileScreen({ route, navigation }: Props) {
-  const pet = demoPets.find((item) => item.id === route.params.petId);
+  const { data: pet, loading, error, refresh } = usePet(route.params.petId);
+  const [deleting, setDeleting] = useState(false);
+  const busy = useRef(false);
+  async function removePet(): Promise<void> {
+    if (busy.current) return;
+    busy.current = true;
+    setDeleting(true);
+    try {
+      await deletePet(route.params.petId);
+    } catch (failure) {
+      Alert.alert('Could not delete pet', failure instanceof Error ? failure.message : 'Please retry.');
+      busy.current = false;
+      setDeleting(false);
+      return;
+    }
+    navigation.goBack();
+  }
+  function confirmDelete() {
+    Alert.alert('Delete pet?', `Remove ${pet?.name ?? 'this pet'} from your account? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { void removePet(); } },
+    ]);
+  }
 
   if (!pet) {
     return (
@@ -20,10 +44,11 @@ export default function PetProfileScreen({ route, navigation }: Props) {
         edges={['left', 'right', 'bottom']}
       >
         <View style={styles.fallback}>
-          <Text style={styles.title}>Pet not found</Text>
+          <Text style={styles.title}>{loading ? 'Loading pet...' : 'Pet unavailable'}</Text>
           <Text style={styles.subtitle}>
-            This profile is unavailable.
+            {error || (loading ? 'Please wait.' : 'This profile is unavailable.')}
           </Text>
+          {!loading && <AppButton title="Retry" onPress={refresh} />}
           <AppButton
             title="Go back"
             onPress={() => navigation.goBack()}
@@ -55,7 +80,7 @@ export default function PetProfileScreen({ route, navigation }: Props) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>DEMO PET PROFILE</Text>
+            <Text style={styles.badgeText}>PET PROFILE</Text>
           </View>
 
           <Text accessibilityRole="header" style={styles.title}>
@@ -66,6 +91,7 @@ export default function PetProfileScreen({ route, navigation }: Props) {
           <View style={styles.editButton}>
             <AppButton
               title="Edit pet details"
+              disabled={deleting}
               onPress={() =>
                 navigation.navigate('EditPet', { petId: pet.id })
               }
@@ -97,12 +123,17 @@ export default function PetProfileScreen({ route, navigation }: Props) {
           </AppCard>
 
           <Text style={styles.previewNote}>
-            Editing is currently a preview. Health records will be added
-            in the next step.
+            Your pet’s profile is saved to your account. Health records
+            will be added in the next step.
           </Text>
 
+          <View style={{ marginBottom: 12 }}>
+            <AppButton title="Delete pet" variant="secondary" onPress={confirmDelete}
+              loading={deleting} disabled={deleting} />
+          </View>
           <AppButton
             title="Back to my pets"
+            disabled={deleting}
             variant="secondary"
             onPress={() => navigation.goBack()}
           />

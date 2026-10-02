@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -12,7 +12,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import AppButton from '../../components/AppButton';
-import { demoPets } from '../../constants/demoPets';
+import { usePets } from '../../hooks/usePetData';
 import { colors } from '../../constants/theme';
 
 import type {
@@ -50,11 +50,10 @@ function getPetEmoji(species: string) {
 export default function MyPetsScreen({ navigation }: Props) {
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
 
-  const petCount = demoPets.length;
-
-  const nextVaccine = useMemo(() => {
-    return demoPets.length > 0 ? 'Vaccination due soon' : 'No reminders yet';
-  }, []);
+  const { data, loading, error, refresh } = usePets();
+  const pets = data ?? [];
+  const petCount = data?.length ?? null;
+  const nextVaccine = 'Coming soon';
 
   return (
     <SafeAreaView
@@ -97,7 +96,7 @@ export default function MyPetsScreen({ navigation }: Props) {
           {/* PET COUNT CARD */}
           <View style={styles.overviewCard}>
             <View style={styles.overviewLeft}>
-              <Text style={styles.overviewNumber}>{petCount}</Text>
+              <Text style={styles.overviewNumber}>{petCount ?? '—'}</Text>
 
               <View>
                 <Text style={styles.overviewTitle}>
@@ -196,12 +195,19 @@ export default function MyPetsScreen({ navigation }: Props) {
             </View>
 
             <Text style={styles.countText}>
-              {petCount}
+              {petCount ?? '—'}
             </Text>
           </View>
 
+          {loading && <Text style={styles.sectionSubtitle}>Loading your pets...</Text>}
+          {!!error && <View style={{ gap: 12 }}>
+            <Text accessibilityRole="alert" style={styles.sectionSubtitle}>{error}</Text>
+            <AppButton title="Retry" onPress={refresh} />
+          </View>}
+          {!loading && !error && pets.length === 0 &&
+            <Text style={styles.sectionSubtitle}>No pets yet. Add your first companion below.</Text>}
           <View style={styles.petList}>
-            {demoPets.map((pet, index) => {
+            {pets.map((pet, index) => {
               const isSelected = selectedPet === pet.id;
 
               return (

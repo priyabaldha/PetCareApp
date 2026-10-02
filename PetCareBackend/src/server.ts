@@ -5,6 +5,7 @@ import {
   disconnectDatabase,
 } from './database.ts';
 import { initializeSessions } from './routes/sessions.ts';
+import { createPetIndexes } from './models/pet.ts';
 
 const PORT = 4000;
 const HOST = '0.0.0.0';
@@ -14,6 +15,7 @@ async function startServer(): Promise<void> {
     await connectDatabase();
     await createUserIndexes();
 await initializeSessions();
+await createPetIndexes();
 
     const server = app.listen(PORT, HOST, () => {
       console.log(`JEEVA backend is listening on port ${PORT}`);

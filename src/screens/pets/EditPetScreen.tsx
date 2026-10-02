@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -13,9 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { updatePet } from '../../services/pets';
 import AppButton from '../../components/AppButton';
 import AppInput from '../../components/AppInput';
-import { demoPets } from '../../constants/demoPets';
+import { usePet } from '../../hooks/usePetData';
 import { colors } from '../../constants/theme';
 import type { RootStackParamList } from '../../types/navigation';
 import type { PetSex, PetSpecies } from '../../types/pet';
@@ -33,7 +34,7 @@ const speciesOptions: PetSpecies[] = [
 const sexOptions: PetSex[] = ['male', 'female', 'unknown'];
 
 export default function EditPetScreen({ route, navigation }: Props) {
-  const pet = demoPets.find((item) => item.id === route.params.petId);
+  const { data: pet, loading, error, refresh } = usePet(route.params.petId);
 
   const [name, setName] = useState(pet?.name ?? '');
   const [species, setSpecies] = useState<PetSpecies>(pet?.species ?? 'dog');
@@ -44,6 +45,17 @@ export default function EditPetScreen({ route, navigation }: Props) {
   );
   const [notes, setNotes] = useState(pet?.notes ?? '');
   const [submitted, setSubmitted] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (!pet) return;
+    setName(pet.name); setSpecies(pet.species); setSex(pet.sex);
+    setBreed(pet.breed ?? ''); setWeight(pet.weightKg === undefined ? '' : String(pet.weightKg));
+    setNotes(pet.notes ?? ''); setDateOfBirth(pet.dateOfBirth ?? '');
+  }, [pet]);
+
 
   const nameError = name.trim() ? '' : 'Enter your pet’s name.';
   const trimmedWeight = weight.trim();
@@ -57,26 +69,30 @@ export default function EditPetScreen({ route, navigation }: Props) {
       ? 'Enter a positive weight, such as 4.2.'
       : '';
 
-  function handlePreview() {
+  async function handleSave(): Promise<void> {
+    if (busy.current || saved) return;
     setSubmitted(true);
-
-    if (nameError || weightError) {
-      return;
-    }
-
+    if (nameError || weightError) return;
     Keyboard.dismiss();
-
-    Alert.alert(
-      'Edit preview',
-      `${name.trim()}’s details passed validation. The original demo profile has not been changed.`,
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        {
-          text: 'Back to profile',
-          onPress: () => navigation.goBack(),
-        },
-      ],
-    );
+    busy.current = true;
+    setSaving(true);
+    try {
+      const input = {
+        name: name.trim(), species, sex, breed: breed.trim(), notes: notes.trim(),
+        weightKg: trimmedWeight ? numericWeight : null,
+        dateOfBirth: dateOfBirth.trim() || null,
+      };
+      await updatePet(route.params.petId, input);
+      setSaved(true);
+      Alert.alert('Pet saved', 'Your pet’s details have been saved.', [
+        { text: 'Done', onPress: () => navigation.goBack() },
+      ]);
+    } catch (failure) {
+      Alert.alert('Could not save pet', failure instanceof Error ? failure.message : 'Please try again.');
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
   }
 
   if (!pet) {
@@ -86,7 +102,9 @@ export default function EditPetScreen({ route, navigation }: Props) {
         edges={['left', 'right', 'bottom']}
       >
         <View style={styles.fallback}>
-          <Text style={styles.title}>Pet not found</Text>
+          <Text style={styles.title}>{loading ? 'Loading pet...' : 'Pet unavailable'}</Text>
+          {!!error && <Text style={styles.description}>{error}</Text>}
+          {!loading && <AppButton title="Retry" onPress={refresh} />}
           <AppButton
             title="Go back"
             onPress={() => navigation.goBack()}
@@ -214,6 +232,15 @@ export default function EditPetScreen({ route, navigation }: Props) {
               />
 
               <AppInput
+                label="Date of birth (optional)"
+                placeholder="YYYY-MM-DD"
+                value={dateOfBirth}
+                onChangeText={setDateOfBirth}
+                autoCapitalize="none"
+                maxLength={10}
+              />
+
+              <AppInput
                 label="Notes (optional)"
                 placeholder="Anything to remember"
                 value={notes}
@@ -227,18 +254,21 @@ export default function EditPetScreen({ route, navigation }: Props) {
 
               <View style={styles.previewNote}>
                 <Text style={styles.previewText}>
-                  Preview only. Saving, photo selection, and date-of-birth
-                  editing will be connected in the pet-management step.
+                  Save changes to update your pet’s profile.
+                  Photo upload will be added separately.
                 </Text>
               </View>
 
               <AppButton
-                title="Preview changes"
-                onPress={handlePreview}
+                title={saved ? "Saved" : "Save changes"}
+                onPress={handleSave}
+                loading={saving}
+                disabled={saving || saved}
               />
 
               <AppButton
-                title="Cancel"
+                title={saved ? "Done" : "Cancel"}
+                disabled={saving}
                 variant="secondary"
                 onPress={() => navigation.goBack()}
               />

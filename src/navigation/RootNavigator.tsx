@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Button, Text, View } from 'react-native';
-import { restoreSession } from '../services/auth';
+import { restoreSession, subscribeToSessionExpired } from '../services/auth';
 import { StatusBar } from 'expo-status-bar';
 import {
   DefaultTheme,
@@ -57,6 +57,8 @@ export default function RootNavigator() {
   const [hasSession, setHasSession] = useState(false);
   const [sessionError, setSessionError] = useState('');
   const [retry, setRetry] = useState(0);
+  const handleLoggedOut = useCallback(() => setLaunchStage('auth'), []);
+  useEffect(() => subscribeToSessionExpired(handleLoggedOut), [handleLoggedOut]);
 
   useEffect(() => {
     let active = true;
@@ -74,7 +76,8 @@ export default function RootNavigator() {
 
   useEffect(() => {
     if (splashDone && sessionReady) {
-      setLaunchStage(hasSession ? 'main' : 'onboarding');
+      setLaunchStage((current) => current === 'splash'
+        ? (hasSession ? 'main' : 'onboarding') : current);
     }
   }, [splashDone, sessionReady, hasSession]);
 
@@ -175,11 +178,12 @@ export default function RootNavigator() {
           >
             <Stack.Screen
               name="MainTabs"
-              component={MainTabNavigator}
               options={{
                 headerShown: false,
               }}
-            />
+            >
+              {() => <MainTabNavigator onLoggedOut={handleLoggedOut} />}
+            </Stack.Screen>
 
             <Stack.Screen
               name="Settings"

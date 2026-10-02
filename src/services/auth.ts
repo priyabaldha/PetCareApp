@@ -83,3 +83,84 @@ export async function logout(): Promise<void> {
   if (token) await request('/logout', 'POST', undefined, token);
   await SecureStore.deleteItemAsync(TOKEN_KEY);
 }
+
+
+// Append this ONCE at the end of PetCareApp/src/services/auth.ts.
+// Keep all existing imports, functions, and your working API_BASE_URL.
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'pet_owner' | 'vet' | 'admin';
+}
+
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== 'object') return false;
+  const user = value as Record<string, unknown>;
+  return typeof user.id === 'string' && typeof user.name === 'string' &&
+    typeof user.email === 'string' &&
+    (user.role === 'pet_owner' || user.role === 'vet' || user.role === 'admin');
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const data = await request('/me', 'GET', undefined, token);
+    if (!isAuthUser(data.user)) {
+      throw new Error('The server returned incomplete profile details. Please retry.');
+    }
+    return data.user;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      return null;
+    }
+    // A temporary network error must not remove the saved session.
+    throw error;
+  }
+}
+
+
+// Append ONCE after the existing profile additions in src/services/auth.ts.
+const sessionExpiredListeners = new Set<() => void>();
+export function subscribeToSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => { sessionExpiredListeners.delete(listener); };
+}
+async function expirePetSession(): Promise<never> {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  sessionExpiredListeners.forEach((listener) => listener());
+  throw new ApiError('Your session has expired. Sign in again.', 401);
+}
+
+export async function authenticatedRequest(
+  path: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+  body?: object,
+): Promise<Record<string, unknown>> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) return expirePetSession();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+    if (response.status === 401) return await expirePetSession();
+    const raw: unknown = await response.json().catch(() => null);
+    const data = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    if (!response.ok || data.success !== true) {
+      throw new ApiError(typeof data.message === 'string' ? data.message : `Request failed (${response.status}).`, response.status);
+    }
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new Error(method === 'GET'
+      ? 'Could not load your pets. Check your connection and retry.'
+      : 'Could not confirm the change. Check your pet list before retrying; it may already have been saved.');
+  } finally { clearTimeout(timer); }
+}

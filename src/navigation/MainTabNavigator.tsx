@@ -17,7 +17,7 @@ import CommunityScreen from '../screens/community/CommunityScreen';
 import ExploreScreen from '../screens/explore/ExploreScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 
-import { colors } from '../constants/theme';
+
 
 import type { MainTabParamList } from '../types/navigation';
 
@@ -66,7 +66,11 @@ function TabIcon({
   );
 }
 
-export default function MainTabNavigator() {
+interface MainTabNavigatorProps {
+  onLoggedOut: () => void;
+}
+
+export default function MainTabNavigator({ onLoggedOut }: MainTabNavigatorProps) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -182,7 +186,6 @@ export default function MainTabNavigator() {
 
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon
@@ -196,7 +199,9 @@ export default function MainTabNavigator() {
             />
           ),
         }}
-      />
+      >
+        {() => <ProfileScreen onLoggedOut={onLoggedOut} />}
+      </Tab.Screen>
 
     </Tab.Navigator>
   );

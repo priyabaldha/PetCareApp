@@ -3,7 +3,7 @@ import type { ErrorRequestHandler } from 'express';
 import { checkDatabase } from './database.ts';
 import authRouter from './routes/auth.ts';
 import sessionRouter from './routes/sessions.ts';
-
+import petRouter from './routes/pets.ts';
 
 const app = express();
 
@@ -12,6 +12,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/auth', authRouter);
 app.use('/api/auth', sessionRouter);
+app.use('/api/pets', petRouter);
 
 
 app.get('/api/health', async (_request, response) => {
