@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import { requireSession } from '../middleware/requireSession.ts';
 import { petsCollection, publicPet, validatePet } from '../models/pet.ts';
+import { database } from '../database.ts';
 
 const petRouter = Router();
 petRouter.use(requireSession);
@@ -63,8 +64,33 @@ petRouter.patch('/:petId', async (request, response) => {
 });
 
 petRouter.delete('/:petId', async (request, response) => {
-  const result = await petsCollection.deleteOne({ _id: new ObjectId(String(request.params.petId)), ownerId: response.locals.userId });
-  if (!result.deletedCount) { response.status(404).json({ success: false, message: 'Pet not found.' }); return; }
+  const petId = new ObjectId(String(request.params.petId));
+  const ownerId = response.locals.userId as ObjectId;
+
+  const pet = await petsCollection.findOne({
+    _id: petId,
+    ownerId,
+  });
+
+  if (!pet) {
+    response.status(404).json({
+      success: false,
+      message: 'Pet not found.',
+    });
+    return;
+  }
+
+  await database.collection('vaccinations').deleteMany({
+    petId,
+    ownerId,
+  });
+
+  await petsCollection.deleteOne({
+    _id: petId,
+    ownerId,
+  });
+
   response.json({ success: true });
 });
+
 export default petRouter;

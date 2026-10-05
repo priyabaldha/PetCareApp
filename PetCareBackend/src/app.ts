@@ -4,6 +4,7 @@ import { checkDatabase } from './database.ts';
 import authRouter from './routes/auth.ts';
 import sessionRouter from './routes/sessions.ts';
 import petRouter from './routes/pets.ts';
+import vaccinationRouter from './routes/vaccinations.ts';
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/api/auth', authRouter);
 app.use('/api/auth', sessionRouter);
 app.use('/api/pets', petRouter);
+app.use('/api/pets', vaccinationRouter);
 
 
 app.get('/api/health', async (_request, response) => {

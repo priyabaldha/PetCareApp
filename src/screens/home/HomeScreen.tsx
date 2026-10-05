@@ -1,5 +1,6 @@
-﻿import { useState } from 'react';
-import {
+﻿import { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { getCurrentUser } from '../../services/auth';import {
   Alert,
   Image,
   Pressable,
@@ -14,8 +15,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-
+import { listPets } from '../../services/pets';
 import { Ionicons } from '@expo/vector-icons';
+import { listVaccinations } from '../../services/vaccinations';
+import type { Vaccination } from '../../services/vaccinations';
+
+import {
+  getVaccineReminders,
+  getVaccineDueStatus,
+} from '../../utils/vaccinationSummary';
 
 import type {
   MainTabParamList,
@@ -75,8 +83,151 @@ const quickActions: QuickAction[] = [
   },
 ];
 
+type HomeVaccineReminder = Vaccination & {
+  petName: string;
+};
+
 export default function HomeScreen({ navigation }: Props) {
   const [showActions, setShowActions] = useState(false);
+
+  const [pets, setPets] = useState<
+  Awaited<ReturnType<typeof listPets>>
+>([]);
+const [petsLoading, setPetsLoading] = useState(true);
+const [petsError, setPetsError] = useState('');
+const [petsRetry, setPetsRetry] = useState(0);
+
+const [vaccineReminders, setVaccineReminders] =
+  useState<HomeVaccineReminder[]>([]);
+
+const [vaccinesLoading, setVaccinesLoading] = useState(true);
+const [vaccinesError, setVaccinesError] = useState('');
+
+const nextVaccine = vaccineReminders[0];
+
+const vaccineStatus = nextVaccine?.nextDueDate
+  ? getVaccineDueStatus(nextVaccine.nextDueDate)
+  : null;
+
+useFocusEffect(
+  useCallback(() => {
+    let active = true;
+
+    setPetsLoading(true);
+    setPetsError('');
+    setPets([]);
+
+    listPets()
+      .then((savedPets) => {
+        if (active) {
+          setPets(savedPets);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setPetsError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load your pets.',
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPetsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [petsRetry]),
+);
+  const [userName, setUserName] = useState('');
+const [nameError, setNameError] = useState('');
+const [nameRetry, setNameRetry] = useState(0);
+
+useFocusEffect(
+  useCallback(() => {
+    let active = true;
+
+    setPetsLoading(true);
+    setPetsError('');
+    setPets([]);
+
+    setVaccinesLoading(true);
+    setVaccinesError('');
+    setVaccineReminders([]);
+
+    async function loadHomePets() {
+      let savedPets: Awaited<ReturnType<typeof listPets>>;
+
+      try {
+        savedPets = await listPets();
+      } catch (error: unknown) {
+        if (active) {
+          setPetsError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load your pets.',
+          );
+
+          setVaccinesError('Could not load vaccination reminders.');
+          setPetsLoading(false);
+          setVaccinesLoading(false);
+        }
+
+        return;
+      }
+
+      if (!active) return;
+
+      setPets(savedPets);
+      setPetsLoading(false);
+
+      try {
+        const remindersByPet = await Promise.all(
+          savedPets.map(async (pet) => {
+            const records = await listVaccinations(pet.id);
+
+            return getVaccineReminders(records).map((record) => ({
+              ...record,
+              petName: pet.name,
+            }));
+          }),
+        );
+
+        const reminders = remindersByPet
+          .flat()
+          .sort((a, b) =>
+            (a.nextDueDate ?? '').localeCompare(b.nextDueDate ?? ''),
+          );
+
+        if (active) {
+          setVaccineReminders(reminders);
+        }
+      } catch (error: unknown) {
+        if (active) {
+          setVaccinesError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load vaccination reminders.',
+          );
+        }
+      } finally {
+        if (active) {
+          setVaccinesLoading(false);
+        }
+      }
+    }
+
+    void loadHomePets();
+
+    return () => {
+      active = false;
+    };
+  }, [petsRetry]),
+);
 
   function handleQuickAction(id: string) {
     switch (id) {
@@ -95,11 +246,18 @@ export default function HomeScreen({ navigation }: Props) {
         break;
 
       case 'vaccine':
-        Alert.alert(
-          'Vaccination reminders',
-          'Your upcoming vaccination reminders will appear here.',
-        );
-        break;
+  if (vaccinesLoading) {
+    Alert.alert('Vaccinations', 'Your reminders are loading.');
+  } else if (vaccinesError) {
+    setPetsRetry((value) => value + 1);
+  } else if (nextVaccine) {
+    navigation.navigate('PetProfile', {
+      petId: nextVaccine.petId,
+    });
+  } else {
+    navigation.navigate('MyPets');
+  }
+  break;
 
       case 'guide':
         navigation.navigate('Explore');
@@ -131,9 +289,21 @@ export default function HomeScreen({ navigation }: Props) {
                 GOOD MORNING ✨
               </Text>
 
-              <Text style={styles.title}>
-                Hello, Aayushi
-              </Text>
+             <Text style={styles.title}>
+  {userName ? `Hello, ${userName}` : 'Hello'}
+</Text>
+
+{!!nameError && (
+  <Pressable
+    onPress={() => setNameRetry((value) => value + 1)}
+    accessibilityRole="button"
+    style={{ paddingVertical: 8 }}
+  >
+    <Text style={{ color: '#C45B45', fontSize: 11 }}>
+      Could not load your name. Tap to retry.
+    </Text>
+  </Pressable>
+)}
 
               <Text style={styles.subtitle}>
                 Let's make today special for them.
@@ -221,7 +391,118 @@ export default function HomeScreen({ navigation }: Props) {
               </View>
             </View>
           </View>
+                {/* SAVED PETS */}
+<View style={styles.sectionHeader}>
+  <View>
+    <Text style={styles.sectionTitle}>My pets</Text>
 
+    <Text style={styles.sectionSubtitle}>
+      Your little family, all in one place
+    </Text>
+  </View>
+
+  <Pressable
+    onPress={() => navigation.navigate('AddPet')}
+    accessibilityRole="button"
+    accessibilityLabel="Add a pet"
+    style={styles.plusButton}
+  >
+    <Ionicons name="add" size={23} color="#FFFFFF" />
+  </Pressable>
+</View>
+
+{petsLoading ? (
+  <View style={homePetStyles.messageCard}>
+    <Text style={homePetStyles.detail}>Loading your pets…</Text>
+  </View>
+) : petsError ? (
+  <View style={homePetStyles.messageCard}>
+    <Text style={homePetStyles.error}>{petsError}</Text>
+
+    <Pressable
+      onPress={() => setPetsRetry((value) => value + 1)}
+      accessibilityRole="button"
+      style={homePetStyles.actionButton}
+    >
+      <Text style={homePetStyles.actionText}>Try again</Text>
+    </Pressable>
+  </View>
+) : pets.length === 0 ? (
+  <View style={homePetStyles.messageCard}>
+    <Text style={homePetStyles.emoji}>🐾</Text>
+
+    <Text style={homePetStyles.name}>Meet your pet family</Text>
+
+    <Text style={homePetStyles.detail}>
+      Add your first pet to start organising their care.
+    </Text>
+
+    <Pressable
+      onPress={() => navigation.navigate('AddPet')}
+      accessibilityRole="button"
+      style={homePetStyles.actionButton}
+    >
+      <Text style={homePetStyles.actionText}>
+        Add your first pet
+      </Text>
+    </Pressable>
+  </View>
+) : (
+  <ScrollView
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    contentContainerStyle={homePetStyles.list}
+  >
+    {pets.map((pet) => (
+      <Pressable
+        key={pet.id}
+        onPress={() =>
+          navigation.navigate('PetProfile', { petId: pet.id })
+        }
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${pet.name}'s profile`}
+        style={({ pressed }) => [
+          homePetStyles.card,
+          pressed && styles.pressed,
+        ]}
+      >
+        <View style={homePetStyles.avatar}>
+          <Text style={homePetStyles.emoji}>
+            {pet.species === 'dog'
+              ? '🐶'
+              : pet.species === 'cat'
+                ? '🐱'
+                : pet.species === 'bird'
+                  ? '🐦'
+                  : pet.species === 'rabbit'
+                    ? '🐰'
+                    : '🐾'}
+          </Text>
+        </View>
+
+        <Text style={homePetStyles.name} numberOfLines={1}>
+          {pet.name}
+        </Text>
+
+        <Text style={homePetStyles.detail} numberOfLines={1}>
+          {pet.breed?.trim() ||
+            pet.species.charAt(0).toUpperCase() +
+              pet.species.slice(1)}
+        </Text>
+
+        <View style={homePetStyles.profileLink}>
+          <Text style={homePetStyles.linkText}>View profile</Text>
+
+          <Ionicons
+            name="arrow-forward"
+            size={15}
+            color="#67539B"
+          />
+        </View>
+      </Pressable>
+    ))}
+  </ScrollView>
+)}
           {/* =====================================
               TODAY'S CARE
           ===================================== */}
@@ -251,6 +532,7 @@ export default function HomeScreen({ navigation }: Props) {
             </Pressable>
           </View>
 
+            
           {/* =====================================
               QUICK ACTIONS
           ===================================== */}
@@ -346,50 +628,105 @@ export default function HomeScreen({ navigation }: Props) {
           ===================================== */}
 
           <View style={styles.vaccineCard}>
-            <View style={styles.vaccineIcon}>
-              <Ionicons
-                name="medical"
-                size={23}
-                color="#E76F51"
-              />
-            </View>
+  <View style={styles.vaccineIcon}>
+    <Ionicons name="medical" size={23} color="#E76F51" />
+  </View>
 
-            <View style={styles.vaccineContent}>
-              <View style={styles.vaccineTopRow}>
-                <Text style={styles.vaccineLabel}>
-                  NEXT REMINDER
-                </Text>
+  <View style={styles.vaccineContent}>
+    <View style={styles.vaccineTopRow}>
+      <Text style={styles.vaccineLabel}>
+        VACCINATION REMINDER
+      </Text>
 
-                <View style={styles.upcomingBadge}>
-                  <Text style={styles.upcomingText}>
-                    UPCOMING
-                  </Text>
-                </View>
-              </View>
+      {!vaccinesLoading && !vaccinesError && vaccineStatus && (
+        <View style={styles.upcomingBadge}>
+          <Text
+            style={[
+              styles.upcomingText,
+              { color: vaccineStatus.color },
+            ]}
+          >
+            {vaccineStatus.label.toUpperCase()}
+          </Text>
+        </View>
+      )}
+    </View>
 
-              <Text style={styles.vaccineTitle}>
-                Vaccination reminder
-              </Text>
+    {vaccinesLoading ? (
+      <Text style={styles.vaccineDescription}>
+        Loading vaccination reminders…
+      </Text>
+    ) : vaccinesError ? (
+      <>
+        <Text style={styles.vaccineDescription}>
+          {vaccinesError}
+        </Text>
 
-              <Text style={styles.vaccineDescription}>
-                Milo's annual vaccination is due in
-                12 days.
-              </Text>
+        <Pressable
+          onPress={() => setPetsRetry((value) => value + 1)}
+          accessibilityRole="button"
+          style={{ paddingVertical: 10 }}
+        >
+          <Text style={styles.manageReminder}>Try again →</Text>
+        </Pressable>
+      </>
+    ) : nextVaccine && vaccineStatus ? (
+      <>
+        <Text style={styles.vaccineTitle}>
+          {nextVaccine.petName} · {nextVaccine.vaccineName}
+        </Text>
 
-              <Pressable
-                onPress={() =>
-                  Alert.alert(
-                    'Vaccination reminder',
-                    'Email and in-app vaccine reminders will be connected to your pet profile.',
-                  )
-                }
-              >
-                <Text style={styles.manageReminder}>
-                  Manage reminders →
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+        <Text style={styles.vaccineDescription}>
+          {vaccineStatus.description}
+          {'\n'}
+          Due date: {nextVaccine.nextDueDate}
+        </Text>
+
+        {vaccineReminders.length > 1 && (
+          <Text style={styles.vaccineDescription}>
+            {vaccineReminders.length - 1} other vaccine
+            {vaccineReminders.length === 2 ? '' : 's'} with due dates
+          </Text>
+        )}
+
+        <Pressable
+          onPress={() =>
+            navigation.navigate('PetProfile', {
+              petId: nextVaccine.petId,
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${nextVaccine.petName}'s vaccination records`}
+          style={{ paddingVertical: 10 }}
+        >
+          <Text style={styles.manageReminder}>
+            View vaccination records →
+          </Text>
+        </Pressable>
+      </>
+    ) : (
+      <>
+        <Text style={styles.vaccineTitle}>
+          No vaccination due dates saved
+        </Text>
+
+        <Text style={styles.vaccineDescription}>
+          Add your vet’s next due date to a pet’s vaccination record.
+        </Text>
+
+        <Pressable
+          onPress={() => navigation.navigate('MyPets')}
+          accessibilityRole="button"
+          style={{ paddingVertical: 10 }}
+        >
+          <Text style={styles.manageReminder}>
+            Open my pets →
+          </Text>
+        </Pressable>
+      </>
+    )}
+  </View>
+</View>
 
           {/* =====================================
               COMMUNITY
@@ -1362,5 +1699,80 @@ const styles = StyleSheet.create({
 
   bottomSpace: {
     height: 80,
+  },
+});
+
+const homePetStyles = StyleSheet.create({
+  list: {
+    paddingBottom: 8,
+    gap: 12,
+  },
+  card: {
+    width: 164,
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEE9FA',
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    backgroundColor: '#EEE9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emoji: {
+    fontSize: 32,
+  },
+  name: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#343047',
+    marginBottom: 5,
+  },
+  detail: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#777184',
+  },
+  profileLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 16,
+  },
+  linkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#67539B',
+  },
+  messageCard: {
+    padding: 20,
+    gap: 10,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EEE9FA',
+  },
+  error: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#C45B45',
+  },
+  actionButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#67539B',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 4,
+  },
+  actionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

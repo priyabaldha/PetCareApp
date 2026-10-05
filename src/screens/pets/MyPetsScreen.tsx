@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Pressable,
   ScrollView,
@@ -14,6 +15,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AppButton from '../../components/AppButton';
 import { usePets } from '../../hooks/usePetData';
 import { colors } from '../../constants/theme';
+
+import { listVaccinations } from '../../services/vaccinations';
+import type { Vaccination } from '../../services/vaccinations';
+
+import {
+  getVaccineReminders,
+  getVaccineDueStatus,
+} from '../../utils/vaccinationSummary';
 
 import type {
   MainTabParamList,
@@ -53,7 +62,121 @@ export default function MyPetsScreen({ navigation }: Props) {
   const { data, loading, error, refresh } = usePets();
   const pets = data ?? [];
   const petCount = data?.length ?? null;
-  const nextVaccine = 'Coming soon';
+  const [vaccinesByPet, setVaccinesByPet] = useState<
+  Record<string, Vaccination[]>
+>({});
+const [vaccinesLoading, setVaccinesLoading] = useState(true);
+const [vaccinesError, setVaccinesError] = useState('');
+const [vaccinesRetry, setVaccinesRetry] = useState(0);
+
+useFocusEffect(
+  useCallback(() => {
+    let active = true;
+
+    setVaccinesByPet({});
+    setVaccinesError('');
+
+    if (loading) {
+      setVaccinesLoading(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (error || !data) {
+      setVaccinesLoading(false);
+      setVaccinesError('Load your pets first to see vaccinations.');
+
+      return () => {
+        active = false;
+      };
+    }
+
+    setVaccinesLoading(true);
+
+    async function loadVaccinations() {
+      try {
+        const entries = await Promise.all(
+          (data ?? []).map(async (pet) => {
+            const records = await listVaccinations(pet.id);
+
+            return {
+              petId: pet.id,
+              reminders: getVaccineReminders(records),
+            };
+          }),
+        );
+
+        if (!active) return;
+
+        const grouped: Record<string, Vaccination[]> = {};
+
+        for (const entry of entries) {
+          grouped[entry.petId] = entry.reminders;
+        }
+
+        setVaccinesByPet(grouped);
+      } catch (failure: unknown) {
+        if (active) {
+          setVaccinesError(
+            failure instanceof Error
+              ? failure.message
+              : 'Could not load vaccinations.',
+          );
+        }
+      } finally {
+        if (active) {
+          setVaccinesLoading(false);
+        }
+      }
+    }
+
+    void loadVaccinations();
+
+    return () => {
+      active = false;
+    };
+  }, [data, loading, error, vaccinesRetry]),
+);
+
+const allReminders = pets
+  .flatMap((pet) =>
+    (vaccinesByPet[pet.id] ?? []).map((record) => ({
+      ...record,
+      petName: pet.name,
+    })),
+  )
+  .sort((a, b) =>
+    (a.nextDueDate ?? '').localeCompare(b.nextDueDate ?? ''),
+  );
+
+const nextVaccine = allReminders[0];
+
+const nextVaccineStatus = nextVaccine?.nextDueDate
+  ? getVaccineDueStatus(nextVaccine.nextDueDate)
+  : null;
+
+function openVaccinations() {
+  if (loading || vaccinesLoading) return;
+
+  if (error) {
+    refresh();
+    return;
+  }
+
+  if (vaccinesError) {
+    setVaccinesRetry((value) => value + 1);
+    return;
+  }
+
+  const petId = nextVaccine?.petId ?? pets[0]?.id;
+
+  if (petId) {
+    navigation.navigate('PetProfile', { petId });
+  } else {
+    navigation.navigate('AddPet');
+  }
+}
 
   return (
     <SafeAreaView
@@ -122,20 +245,53 @@ export default function MyPetsScreen({ navigation }: Props) {
 
           <View style={styles.quickActions}>
 
-            <Pressable
-              style={[styles.quickCard, styles.lavenderCard]}
-              onPress={() => {}}
-            >
-              <View style={styles.quickIcon}>
-                <Text>💉</Text>
-              </View>
+           <Pressable
+  style={[styles.quickCard, styles.lavenderCard]}
+  onPress={openVaccinations}
+  disabled={loading || vaccinesLoading}
+  accessibilityRole="button"
+  accessibilityLabel="Open vaccination records"
+>
+  <View style={styles.quickIcon}>
+    <Text>💉</Text>
+  </View>
 
-              <Text style={styles.quickTitle}>Vaccines</Text>
+  <Text style={styles.quickTitle}>Vaccines</Text>
 
-              <Text style={styles.quickText}>
-                {nextVaccine}
-              </Text>
-            </Pressable>
+  {loading || vaccinesLoading ? (
+    <Text style={styles.quickText}>Loading reminders…</Text>
+  ) : error || vaccinesError ? (
+    <Text style={styles.quickText}>
+      Could not load. Tap to retry.
+    </Text>
+  ) : nextVaccine && nextVaccineStatus ? (
+    <>
+      <Text
+        style={[
+          styles.quickText,
+          {
+            color: nextVaccineStatus.color,
+            fontWeight: '700',
+          },
+        ]}
+      >
+        {nextVaccineStatus.label}
+      </Text>
+
+      <Text style={styles.quickText}>
+        {nextVaccine.petName} · {nextVaccine.vaccineName}
+        {'\n'}
+        {nextVaccine.nextDueDate}
+      </Text>
+    </>
+  ) : (
+    <Text style={styles.quickText}>
+      {pets.length === 0
+        ? 'Add your first pet'
+        : 'No due dates saved · Tap to add'}
+    </Text>
+  )}
+</Pressable>
 
             <Pressable
               style={[styles.quickCard, styles.blueCard]}
@@ -209,7 +365,11 @@ export default function MyPetsScreen({ navigation }: Props) {
           <View style={styles.petList}>
             {pets.map((pet, index) => {
               const isSelected = selectedPet === pet.id;
+              const petVaccine = vaccinesByPet[pet.id]?.[0];
 
+const petVaccineStatus = petVaccine?.nextDueDate
+  ? getVaccineDueStatus(petVaccine.nextDueDate)
+  : null;
               return (
                 <Pressable
                   key={pet.id}
@@ -260,7 +420,35 @@ export default function MyPetsScreen({ navigation }: Props) {
                     <Text style={styles.petBreed}>
                       {pet.breed}
                     </Text>
+                    {loading || vaccinesLoading ? (
+  <Text style={styles.quickText}>Loading vaccinations…</Text>
+) : error || vaccinesError ? (
+  <Text style={styles.quickText}>
+    Vaccination summary unavailable
+  </Text>
+) : petVaccine && petVaccineStatus ? (
+  <View style={{ marginTop: 7 }}>
+    <Text
+      style={[
+        styles.quickText,
+        {
+          color: petVaccineStatus.color,
+          fontWeight: '700',
+        },
+      ]}
+    >
+      💉 {petVaccineStatus.label}
+    </Text>
 
+    <Text style={styles.quickText}>
+      {petVaccine.vaccineName} · {petVaccine.nextDueDate}
+    </Text>
+  </View>
+) : (
+  <Text style={styles.quickText}>
+    No vaccination due date saved
+  </Text>
+)}
                     <View style={styles.petTags}>
                       <View style={styles.speciesTag}>
                         <Text style={styles.speciesTagText}>

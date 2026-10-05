@@ -9,6 +9,8 @@ import { usePet } from '../../hooks/usePetData';
 import { deletePet } from '../../services/pets';
 import { colors } from '../../constants/theme';
 import type { RootStackParamList } from '../../types/navigation';
+import PetVaccinations from '../../components/PetVaccinations';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PetProfile'>;
 
@@ -77,7 +79,10 @@ export default function PetProfileScreen({ route, navigation }: Props) {
       style={styles.screen}
       edges={['left', 'right', 'bottom']}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+  contentContainerStyle={styles.scrollContent}
+  keyboardShouldPersistTaps="handled"
+>
         <View style={styles.content}>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>PET PROFILE</Text>
@@ -122,10 +127,7 @@ export default function PetProfileScreen({ route, navigation }: Props) {
             </Text>
           </AppCard>
 
-          <Text style={styles.previewNote}>
-            Your pet’s profile is saved to your account. Health records
-            will be added in the next step.
-          </Text>
+          <PetVaccinations key={pet.id} petId={pet.id} />
 
           <View style={{ marginBottom: 12 }}>
             <AppButton title="Delete pet" variant="secondary" onPress={confirmDelete}

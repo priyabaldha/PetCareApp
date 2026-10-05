@@ -18,7 +18,7 @@ import type { AuthStackParamList } from '../../types/navigation';
 
 // Replace YOUR_COMPUTER_WIFI_IP with the IPv4 address from ipconfig.
 // Local development only; use HTTPS for a deployed backend.
-const API_BASE_URL = 'http://192.168.1.40:4000';
+const API_BASE_URL = 'http://192.168.1.11:4000';
 
 function utf8Length(value: string): number {
   let bytes = 0;
@@ -26,7 +26,7 @@ function utf8Length(value: string): number {
     const point = character.codePointAt(0)!;
     bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
   }
-  return bytes;
+  return bytes;  
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Signup'>;

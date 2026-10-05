@@ -58,21 +58,67 @@ export default function RootNavigator() {
   const [sessionError, setSessionError] = useState('');
   const [retry, setRetry] = useState(0);
   const handleLoggedOut = useCallback(() => setLaunchStage('auth'), []);
+  const handleSplashComplete = useCallback(() => {
+  setSplashDone(true);
+}, []);
+
+useEffect(() => {
+  // Continue even if an animation callback does not finish.
+  const timer = setTimeout(handleSplashComplete, 12000);
+
+  return () => clearTimeout(timer);
+}, [handleSplashComplete]);
   useEffect(() => subscribeToSessionExpired(handleLoggedOut), [handleLoggedOut]);
 
-  useEffect(() => {
-    let active = true;
-    setSessionReady(false);
-    setSessionError('');
-    restoreSession().then((valid) => {
-      if (!active) return;
+useEffect(() => {
+  let active = true;
+  let settled = false;
+
+  setSessionReady(false);
+  setSessionError('');
+
+  const timer = setTimeout(() => {
+    if (!active || settled) return;
+
+    settled = true;
+
+    setSessionError(
+      'Checking your saved session took too long. Retry or go to sign in.',
+    );
+  }, 20000);
+
+  async function checkSession() {
+    try {
+      const valid = await restoreSession();
+
+      if (!active || settled) return;
+
+      settled = true;
+      clearTimeout(timer);
+
       setHasSession(valid);
       setSessionReady(true);
-    }).catch((error: unknown) => {
-      if (active) setSessionError(error instanceof Error ? error.message : 'Could not check your session.');
-    });
-    return () => { active = false; };
-  }, [retry]);
+    } catch (error: unknown) {
+      if (!active || settled) return;
+
+      settled = true;
+      clearTimeout(timer);
+
+      setSessionError(
+        error instanceof Error
+          ? error.message
+          : 'Could not check your saved session.',
+      );
+    }
+  }
+
+  void checkSession();
+
+  return () => {
+    active = false;
+    clearTimeout(timer);
+  };
+}, [retry]);
 
   useEffect(() => {
     if (splashDone && sessionReady) {
@@ -113,11 +159,7 @@ export default function RootNavigator() {
       <>
         <StatusBar style="dark" />
 
-        <SplashScreen
-          onComplete={() =>
-            setSplashDone(true)
-          }
-        />
+        <SplashScreen onComplete={handleSplashComplete} />
       </>
     );
   }

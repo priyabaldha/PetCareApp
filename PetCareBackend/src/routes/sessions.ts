@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import { rateLimit } from 'express-rate-limit';
 import { database } from '../database.ts';
 import { usersCollection } from '../models/user.ts';
+import { requireSession } from '../middleware/requireSession.ts';
 
 interface Session {
   tokenHash: string;
@@ -97,6 +98,72 @@ sessionRouter.post('/logout', async (request, response) => {
   const token = readToken(request);
   if (token) await sessions.deleteOne({ tokenHash: digest(token) });
   response.json({ success: true });
+});
+
+sessionRouter.patch('/me', requireSession, async (request, response) => {
+  const body: unknown = request.body;
+
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    response.status(400).json({
+      success: false,
+      message: 'Provide your name.',
+    });
+    return;
+  }
+
+  const input = body as Record<string, unknown>;
+
+  if (Object.keys(input).some((key) => key !== 'name')) {
+    response.status(400).json({
+      success: false,
+      message: 'Only your name can be changed here.',
+    });
+    return;
+  }
+
+  if (
+    typeof input.name !== 'string' ||
+    input.name.trim().length < 2 ||
+    input.name.trim().length > 100
+  ) {
+    response.status(400).json({
+      success: false,
+      message: 'Name must contain between 2 and 100 characters.',
+    });
+    return;
+  }
+
+  const user = await usersCollection.findOneAndUpdate(
+    { _id: response.locals.userId },
+    {
+      $set: {
+        name: input.name.trim(),
+        updatedAt: new Date(),
+      },
+    },
+    {
+      returnDocument: 'after',
+      includeResultMetadata: false,
+    },
+  );
+
+  if (!user) {
+    response.status(401).json({
+      success: false,
+      message: 'Your account is unavailable. Please sign in again.',
+    });
+    return;
+  }
+
+  response.json({
+    success: true,
+    user: {
+      id: user._id.toHexString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  });
 });
 
 export default sessionRouter;

@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 // Copy the SAME working address used in SignupScreen.tsx. No /api/health suffix.
-const API_BASE_URL = 'http://192.168.1.40:4000';
+const API_BASE_URL = 'http://192.168.1.11:4000';
 const TOKEN_KEY = 'jeeva.session.v1';
 
 class ApiError extends Error {
@@ -160,7 +160,33 @@ export async function authenticatedRequest(
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new Error(method === 'GET'
-      ? 'Could not load your pets. Check your connection and retry.'
-      : 'Could not confirm the change. Check your pet list before retrying; it may already have been saved.');
+      ? 'Could not load data. Check your connection and retry.'
+      : 'Could not confirm the change. Refresh the screen before retrying; it may already have been saved.');
   } finally { clearTimeout(timer); }
+}
+
+export async function updateProfileName(
+  name: string,
+): Promise<AuthUser> {
+  const trimmedName = name.trim();
+
+  if (trimmedName.length < 2 || trimmedName.length > 100) {
+    throw new Error(
+      'Name must contain between 2 and 100 characters.',
+    );
+  }
+
+  const data = await authenticatedRequest(
+    '/api/auth/me',
+    'PATCH',
+    { name: trimmedName },
+  );
+
+  if (!isAuthUser(data.user)) {
+    throw new Error(
+      'Could not confirm the saved name. Refresh Profile to check it.',
+    );
+  }
+
+  return data.user;
 }
