@@ -28,86 +28,89 @@ import {
   getVaccineDueStatus,
 } from '../../utils/vaccinationSummary';
 
+import { useAppointmentSummary } from '../../hooks/useAppointmentSummary';
+
 interface ProfileScreenProps {
   onLoggedOut: () => void;
 }
 
 export default function ProfileScreen({ onLoggedOut }: ProfileScreenProps) {
+  const appointments = useAppointmentSummary();
   const petCount = usePetCount();
   const [vaccineSummary, setVaccineSummary] = useState<{
-  total: number;
-  overdue: number;
-  dueToday: number;
-} | null>(null);
+    total: number;
+    overdue: number;
+    dueToday: number;
+  } | null>(null);
 
-const [vaccinesLoading, setVaccinesLoading] = useState(true);
-const [vaccinesError, setVaccinesError] = useState('');
-const [vaccinesRetry, setVaccinesRetry] = useState(0);
+  const [vaccinesLoading, setVaccinesLoading] = useState(true);
+  const [vaccinesError, setVaccinesError] = useState('');
+  const [vaccinesRetry, setVaccinesRetry] = useState(0);
 
-useFocusEffect(
-  useCallback(() => {
-    let active = true;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    setVaccinesLoading(true);
-    setVaccinesError('');
-    setVaccineSummary(null);
+      setVaccinesLoading(true);
+      setVaccinesError('');
+      setVaccineSummary(null);
 
-    async function loadVaccineSummary() {
-      try {
-        const pets = await listPets();
+      async function loadVaccineSummary() {
+        try {
+          const pets = await listPets();
 
-        if (!active) return;
+          if (!active) return;
 
-        const recordsByPet = await Promise.all(
-          pets.map((pet) => listVaccinations(pet.id)),
-        );
+          const recordsByPet = await Promise.all(
+            pets.map((pet) => listVaccinations(pet.id)),
+          );
 
-        let total = 0;
-        let overdue = 0;
-        let dueToday = 0;
+          let total = 0;
+          let overdue = 0;
+          let dueToday = 0;
 
-        for (const records of recordsByPet) {
-          total += records.length;
+          for (const records of recordsByPet) {
+            total += records.length;
 
-          // Calculate reminders separately for each pet.
-          for (const record of getVaccineReminders(records)) {
-            if (!record.nextDueDate) continue;
+            // Calculate reminders separately for each pet.
+            for (const record of getVaccineReminders(records)) {
+              if (!record.nextDueDate) continue;
 
-            const status = getVaccineDueStatus(record.nextDueDate);
+              const status = getVaccineDueStatus(record.nextDueDate);
 
-            if (status.label === 'Overdue') {
-              overdue += 1;
-            } else if (status.label === 'Due today') {
-              dueToday += 1;
+              if (status.label === 'Overdue') {
+                overdue += 1;
+              } else if (status.label === 'Due today') {
+                dueToday += 1;
+              }
             }
           }
-        }
 
-        if (active) {
-          setVaccineSummary({ total, overdue, dueToday });
-        }
-      } catch (failure: unknown) {
-        if (active) {
-          setVaccinesError(
-            failure instanceof Error
-              ? failure.message
-              : 'Could not load vaccination totals.',
-          );
-        }
-      } finally {
-        if (active) {
-          setVaccinesLoading(false);
+          if (active) {
+            setVaccineSummary({ total, overdue, dueToday });
+          }
+        } catch (failure: unknown) {
+          if (active) {
+            setVaccinesError(
+              failure instanceof Error
+                ? failure.message
+                : 'Could not load vaccination totals.',
+            );
+          }
+        } finally {
+          if (active) {
+            setVaccinesLoading(false);
+          }
         }
       }
-    }
 
-    void loadVaccineSummary();
+      void loadVaccineSummary();
 
-    return () => {
-      active = false;
-    };
-  }, [vaccinesRetry]),
-);
+      return () => {
+        active = false;
+      };
+    }, [vaccinesRetry]),
+  );
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -117,10 +120,10 @@ useFocusEffect(
   const mounted = useRef(true);
   const requestVersion = useRef(0);
   const [editingName, setEditingName] = useState(false);
-const [draftName, setDraftName] = useState('');
-const [editError, setEditError] = useState('');
-const [savingName, setSavingName] = useState(false);
-const nameSaveInProgress = useRef(false);
+  const [draftName, setDraftName] = useState('');
+  const [editError, setEditError] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const nameSaveInProgress = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -150,60 +153,60 @@ const nameSaveInProgress = useRef(false);
     return () => { active = false; };
   }, [onLoggedOut, retry]));
 
-function openNameEditor() {
-  if (!user || busy.current || nameSaveInProgress.current) {
-    return;
-  }
-
-  setDraftName(user.name);
-  setEditError('');
-  setEditingName(true);
-}
-
-async function handleSaveName(): Promise<void> {
-  if (nameSaveInProgress.current || busy.current) {
-    return;
-  }
-
-  const nextName = draftName.trim();
-
-  if (nextName.length < 2 || nextName.length > 100) {
-    setEditError('Use between 2 and 100 characters.');
-    return;
-  }
-
-  nameSaveInProgress.current = true;
-  setSavingName(true);
-  setEditError('');
-
-  // Prevent an older profile request from replacing the saved name.
-  ++requestVersion.current;
-
-  try {
-    const updatedUser = await updateProfileName(nextName);
-
-    if (mounted.current) {
-      setUser(updatedUser);
-      setLoading(false);
-      setError('');
-      setEditingName(false);
+  function openNameEditor() {
+    if (!user || busy.current || nameSaveInProgress.current) {
+      return;
     }
-  } catch (error) {
-    if (mounted.current) {
-      setEditError(
-        error instanceof Error
-          ? error.message
-          : 'Could not save your name.',
-      );
-    }
-  } finally {
-    nameSaveInProgress.current = false;
 
-    if (mounted.current) {
-      setSavingName(false);
+    setDraftName(user.name);
+    setEditError('');
+    setEditingName(true);
+  }
+
+  async function handleSaveName(): Promise<void> {
+    if (nameSaveInProgress.current || busy.current) {
+      return;
+    }
+
+    const nextName = draftName.trim();
+
+    if (nextName.length < 2 || nextName.length > 100) {
+      setEditError('Use between 2 and 100 characters.');
+      return;
+    }
+
+    nameSaveInProgress.current = true;
+    setSavingName(true);
+    setEditError('');
+
+    // Prevent an older profile request from replacing the saved name.
+    ++requestVersion.current;
+
+    try {
+      const updatedUser = await updateProfileName(nextName);
+
+      if (mounted.current) {
+        setUser(updatedUser);
+        setLoading(false);
+        setError('');
+        setEditingName(false);
+      }
+    } catch (error) {
+      if (mounted.current) {
+        setEditError(
+          error instanceof Error
+            ? error.message
+            : 'Could not save your name.',
+        );
+      }
+    } finally {
+      nameSaveInProgress.current = false;
+
+      if (mounted.current) {
+        setSavingName(false);
+      }
     }
   }
-}
 
   async function handleLogout(): Promise<void> {
     if (busy.current || nameSaveInProgress.current) return;
@@ -286,12 +289,12 @@ async function handleSaveName(): Promise<void> {
           </View>
 
           <Pressable
-  onPress={openNameEditor}
-  disabled={!user || loggingOut || savingName}
-  accessibilityRole="button"
-  accessibilityLabel="Edit your name"
-  hitSlop={12}
->
+            onPress={openNameEditor}
+            disabled={!user || loggingOut || savingName}
+            accessibilityRole="button"
+            accessibilityLabel="Edit your name"
+            hitSlop={12}
+          >
             <Ionicons
               name="create-outline"
               size={20}
@@ -310,111 +313,111 @@ async function handleSaveName(): Promise<void> {
             </Pressable>
           </View>
         )}
-        
+
         {editingName && (
-  <View
-    style={{
-      backgroundColor: '#FFFFFF',
-      borderRadius: 20,
-      padding: 18,
-      marginTop: 16,
-    }}
-  >
-    <Text
-      style={{
-        color: '#20352F',
-        fontSize: 18,
-        fontWeight: '800',
-        marginBottom: 12,
-      }}
-    >
-      Edit your name
-    </Text>
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 20,
+              padding: 18,
+              marginTop: 16,
+            }}
+          >
+            <Text
+              style={{
+                color: '#20352F',
+                fontSize: 18,
+                fontWeight: '800',
+                marginBottom: 12,
+              }}
+            >
+              Edit your name
+            </Text>
 
-    <TextInput
-      value={draftName}
-      onChangeText={setDraftName}
-      placeholder="Full name"
-      autoCapitalize="words"
-      autoCorrect={false}
-      maxLength={100}
-      editable={!savingName}
-      accessibilityLabel="Full name"
-      returnKeyType="done"
-      onSubmitEditing={() => {
-        void handleSaveName();
-      }}
-      style={{
-        borderWidth: 1,
-        borderColor: '#D8D5CE',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        fontSize: 16,
-        color: '#20352F',
-      }}
-    />
+            <TextInput
+              value={draftName}
+              onChangeText={setDraftName}
+              placeholder="Full name"
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={100}
+              editable={!savingName}
+              accessibilityLabel="Full name"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleSaveName();
+              }}
+              style={{
+                borderWidth: 1,
+                borderColor: '#D8D5CE',
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                fontSize: 16,
+                color: '#20352F',
+              }}
+            />
 
-    {!!editError && (
-      <Text
-        accessibilityRole="alert"
-        style={{
-          color: '#C45B45',
-          marginTop: 10,
-          fontSize: 12,
-        }}
-      >
-        {editError}
-      </Text>
-    )}
+            {!!editError && (
+              <Text
+                accessibilityRole="alert"
+                style={{
+                  color: '#C45B45',
+                  marginTop: 10,
+                  fontSize: 12,
+                }}
+              >
+                {editError}
+              </Text>
+            )}
 
-    <View
-      style={{
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 16,
-      }}
-    >
-      <Pressable
-        onPress={() => setEditingName(false)}
-        disabled={savingName}
-        accessibilityRole="button"
-        style={{
-          flex: 1,
-          paddingVertical: 13,
-          borderRadius: 12,
-          backgroundColor: '#F1ECF9',
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: '#7057A5', fontWeight: '700' }}>
-          Cancel
-        </Text>
-      </Pressable>
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 12,
+                marginTop: 16,
+              }}
+            >
+              <Pressable
+                onPress={() => setEditingName(false)}
+                disabled={savingName}
+                accessibilityRole="button"
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  backgroundColor: '#F1ECF9',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#7057A5', fontWeight: '700' }}>
+                  Cancel
+                </Text>
+              </Pressable>
 
-      <Pressable
-        onPress={handleSaveName}
-        disabled={savingName}
-        accessibilityRole="button"
-        accessibilityState={{
-          disabled: savingName,
-          busy: savingName,
-        }}
-        style={{
-          flex: 1,
-          paddingVertical: 13,
-          borderRadius: 12,
-          backgroundColor: '#67539B',
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
-          {savingName ? 'Saving...' : 'Save name'}
-        </Text>
-      </Pressable>
-    </View>
-  </View>
-)}
+              <Pressable
+                onPress={handleSaveName}
+                disabled={savingName}
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: savingName,
+                  busy: savingName,
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 13,
+                  borderRadius: 12,
+                  backgroundColor: '#67539B',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
+                  {savingName ? 'Saving...' : 'Save name'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
         {/* PET SUMMARY */}
 
         <Text style={styles.sectionTitle}>
@@ -430,95 +433,139 @@ async function handleSaveName(): Promise<void> {
           />
 
           <Summary
-  number={
-    vaccinesLoading || vaccineSummary === null
-      ? '—'
-      : String(vaccineSummary.total)
-  }
-  label="Vaccine records"
-  emoji="💉"
-  background="#FFE3DF"
-/>
+            number={
+              vaccinesLoading || vaccineSummary === null
+                ? '—'
+                : String(vaccineSummary.total)
+            }
+            label="Vaccine records"
+            emoji="💉"
+            background="#FFE3DF"
+          />
 
           <Summary
-            number="—"
-            label="Appointments"
+            number={
+              appointments.loading || appointments.error
+                ? '—'
+                : String(appointments.count)
+            }
+            label="Upcoming visits"
             emoji="📅"
             background="#DDEEFF"
           />
         </View>
 
         {vaccinesLoading ? (
-  <Text
-    style={{
-      color: '#929087',
-      fontSize: 12,
-      marginTop: 12,
-    }}
-  >
-    Loading vaccination summary…
-  </Text>
-) : vaccinesError ? (
-  <View style={{ marginTop: 12 }}>
-    <Text
-      accessibilityRole="alert"
-      style={{ color: '#C45B45', fontSize: 12 }}
-    >
-      {vaccinesError}
-    </Text>
+          <Text
+            style={{
+              color: '#929087',
+              fontSize: 12,
+              marginTop: 12,
+            }}
+          >
+            Loading vaccination summary…
+          </Text>
+        ) : vaccinesError ? (
+          <View style={{ marginTop: 12 }}>
+            <Text
+              accessibilityRole="alert"
+              style={{ color: '#C45B45', fontSize: 12 }}
+            >
+              {vaccinesError}
+            </Text>
 
-    <Pressable
-      onPress={() => setVaccinesRetry((value) => value + 1)}
-      disabled={loggingOut}
-      accessibilityRole="button"
-      style={{ paddingVertical: 12 }}
-    >
-      <Text style={{ color: '#7057A5', fontWeight: '700' }}>
-        Retry vaccination summary
-      </Text>
-    </Pressable>
-  </View>
-) : vaccineSummary ? (
-  <View
-    style={{
-      marginTop: 12,
-      padding: 14,
-      borderRadius: 16,
-      backgroundColor: '#FFF4EF',
-      gap: 6,
-    }}
-  >
-    <Text
-      style={{
-        color: '#20352F',
-        fontSize: 14,
-        fontWeight: '700',
-      }}
-    >
-      Vaccination reminders
-    </Text>
+            <Pressable
+              onPress={() => setVaccinesRetry((value) => value + 1)}
+              disabled={loggingOut}
+              accessibilityRole="button"
+              style={{ paddingVertical: 12 }}
+            >
+              <Text style={{ color: '#7057A5', fontWeight: '700' }}>
+                Retry vaccination summary
+              </Text>
+            </Pressable>
+          </View>
+        ) : vaccineSummary ? (
+          <View
+            style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 16,
+              backgroundColor: '#FFF4EF',
+              gap: 6,
+            }}
+          >
+            <Text
+              style={{
+                color: '#20352F',
+                fontSize: 14,
+                fontWeight: '700',
+              }}
+            >
+              Vaccination reminders
+            </Text>
 
-    <Text style={{ color: '#7057A5', fontSize: 12 }}>
-      {vaccineSummary.overdue} overdue · {vaccineSummary.dueToday} due today
-    </Text>
+            <Text style={{ color: '#7057A5', fontSize: 12 }}>
+              {vaccineSummary.overdue} overdue · {vaccineSummary.dueToday} due today
+            </Text>
 
-    <Text
-      style={{
-        color: '#777184',
-        fontSize: 12,
-        lineHeight: 18,
-      }}
-    >
-      {vaccineSummary.total === 0
-        ? 'Open a pet’s profile to add their first vaccination record.'
-        : 'Based on saved due dates. Open My Pets to view or update records.'}
-    </Text>
-  </View>
-) : null}
+            <Text
+              style={{
+                color: '#777184',
+                fontSize: 12,
+                lineHeight: 18,
+              }}
+            >
+              {vaccineSummary.total === 0
+                ? 'Open a pet’s profile to add their first vaccination record.'
+                : 'Based on saved due dates. Open My Pets to view or update records.'}
+            </Text>
+          </View>
+        ) : null}
 
-<Text style={{ color: '#929087', fontSize: 10, marginTop: 8 }}>
-  Appointment totals will appear when appointments are connected.
-</Text>
+        <Text style={{ color: '#929087', fontSize: 10, marginTop: 8 }}>
+          {appointments.loading ? (
+            <Text style={{ color: '#929087', fontSize: 12, marginTop: 12 }}>
+              Loading appointments…
+            </Text>
+          ) : appointments.error ? (
+            <View style={{ marginTop: 12 }}>
+              <Text style={{ color: '#C45B45', fontSize: 12 }}>
+                {appointments.error}
+              </Text>
+
+              <Pressable
+                onPress={appointments.refresh}
+                disabled={loggingOut}
+                accessibilityRole="button"
+                style={{ paddingVertical: 12 }}
+              >
+                <Text style={{ color: '#7057A5', fontWeight: '700' }}>
+                  Retry appointments
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View
+              style={{
+                marginTop: 12,
+                padding: 14,
+                borderRadius: 16,
+                backgroundColor: '#E4F0FF',
+                gap: 6,
+              }}
+            >
+              <Text style={{ color: '#20352F', fontSize: 14, fontWeight: '700' }}>
+                {appointments.next ? 'Next appointment' : 'No upcoming appointments'}
+              </Text>
+
+              <Text style={{ color: '#777184', fontSize: 12, lineHeight: 18 }}>
+                {appointments.next
+                  ? `${appointments.next.petName} · ${appointments.next.clinicName}\n${appointments.next.date} at ${appointments.next.time}`
+                  : 'Open a pet’s profile to manage visits or view appointment history.'}
+              </Text>
+            </View>
+          )}</Text>
 
         {!!petCount.error && <Pressable onPress={petCount.refresh} accessibilityRole="button" style={{ paddingVertical: 12 }}>
           <Text style={{ color: '#C45B45', fontSize: 11 }}>Could not load pet count. Tap to retry.</Text>

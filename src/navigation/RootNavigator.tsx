@@ -19,6 +19,7 @@ import EditPetScreen from '../screens/pets/EditPetScreen';
 import PetProfileScreen from '../screens/pets/PetProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
+import AppointmentsScreen from '../screens/appointments/AppointmentsScreen';
 
 import type { RootStackParamList } from '../types/navigation';
 
@@ -59,66 +60,66 @@ export default function RootNavigator() {
   const [retry, setRetry] = useState(0);
   const handleLoggedOut = useCallback(() => setLaunchStage('auth'), []);
   const handleSplashComplete = useCallback(() => {
-  setSplashDone(true);
-}, []);
+    setSplashDone(true);
+  }, []);
 
-useEffect(() => {
-  // Continue even if an animation callback does not finish.
-  const timer = setTimeout(handleSplashComplete, 12000);
+  useEffect(() => {
+    // Continue even if an animation callback does not finish.
+    const timer = setTimeout(handleSplashComplete, 12000);
 
-  return () => clearTimeout(timer);
-}, [handleSplashComplete]);
+    return () => clearTimeout(timer);
+  }, [handleSplashComplete]);
   useEffect(() => subscribeToSessionExpired(handleLoggedOut), [handleLoggedOut]);
 
-useEffect(() => {
-  let active = true;
-  let settled = false;
+  useEffect(() => {
+    let active = true;
+    let settled = false;
 
-  setSessionReady(false);
-  setSessionError('');
+    setSessionReady(false);
+    setSessionError('');
 
-  const timer = setTimeout(() => {
-    if (!active || settled) return;
-
-    settled = true;
-
-    setSessionError(
-      'Checking your saved session took too long. Retry or go to sign in.',
-    );
-  }, 20000);
-
-  async function checkSession() {
-    try {
-      const valid = await restoreSession();
-
+    const timer = setTimeout(() => {
       if (!active || settled) return;
 
       settled = true;
-      clearTimeout(timer);
-
-      setHasSession(valid);
-      setSessionReady(true);
-    } catch (error: unknown) {
-      if (!active || settled) return;
-
-      settled = true;
-      clearTimeout(timer);
 
       setSessionError(
-        error instanceof Error
-          ? error.message
-          : 'Could not check your saved session.',
+        'Checking your saved session took too long. Retry or go to sign in.',
       );
+    }, 20000);
+
+    async function checkSession() {
+      try {
+        const valid = await restoreSession();
+
+        if (!active || settled) return;
+
+        settled = true;
+        clearTimeout(timer);
+
+        setHasSession(valid);
+        setSessionReady(true);
+      } catch (error: unknown) {
+        if (!active || settled) return;
+
+        settled = true;
+        clearTimeout(timer);
+
+        setSessionError(
+          error instanceof Error
+            ? error.message
+            : 'Could not check your saved session.',
+        );
+      }
     }
-  }
 
-  void checkSession();
+    void checkSession();
 
-  return () => {
-    active = false;
-    clearTimeout(timer);
-  };
-}, [retry]);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [retry]);
 
   useEffect(() => {
     if (splashDone && sessionReady) {
@@ -260,10 +261,16 @@ useEffect(() => {
             />
 
             <Stack.Screen
-  name="Notifications"
-  component={NotificationsScreen}
-  options={{ headerShown: false }}
-/>
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="Appointments"
+              component={AppointmentsScreen}
+              options={{ title: 'Appointments' }}
+            />
 
           </Stack.Navigator>
         )}

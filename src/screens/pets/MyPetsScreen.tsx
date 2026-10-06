@@ -28,6 +28,8 @@ import type {
   MainTabParamList,
   RootStackParamList,
 } from '../../types/navigation';
+import { useAppointmentSummary } from '../../hooks/useAppointmentSummary';
+
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'MyPets'>,
@@ -57,126 +59,127 @@ function getPetEmoji(species: string) {
 }
 
 export default function MyPetsScreen({ navigation }: Props) {
+  const appointments = useAppointmentSummary();
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
 
   const { data, loading, error, refresh } = usePets();
   const pets = data ?? [];
   const petCount = data?.length ?? null;
   const [vaccinesByPet, setVaccinesByPet] = useState<
-  Record<string, Vaccination[]>
->({});
-const [vaccinesLoading, setVaccinesLoading] = useState(true);
-const [vaccinesError, setVaccinesError] = useState('');
-const [vaccinesRetry, setVaccinesRetry] = useState(0);
+    Record<string, Vaccination[]>
+  >({});
+  const [vaccinesLoading, setVaccinesLoading] = useState(true);
+  const [vaccinesError, setVaccinesError] = useState('');
+  const [vaccinesRetry, setVaccinesRetry] = useState(0);
 
-useFocusEffect(
-  useCallback(() => {
-    let active = true;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    setVaccinesByPet({});
-    setVaccinesError('');
+      setVaccinesByPet({});
+      setVaccinesError('');
 
-    if (loading) {
+      if (loading) {
+        setVaccinesLoading(true);
+        return () => {
+          active = false;
+        };
+      }
+
+      if (error || !data) {
+        setVaccinesLoading(false);
+        setVaccinesError('Load your pets first to see vaccinations.');
+
+        return () => {
+          active = false;
+        };
+      }
+
       setVaccinesLoading(true);
-      return () => {
-        active = false;
-      };
-    }
 
-    if (error || !data) {
-      setVaccinesLoading(false);
-      setVaccinesError('Load your pets first to see vaccinations.');
+      async function loadVaccinations() {
+        try {
+          const entries = await Promise.all(
+            (data ?? []).map(async (pet) => {
+              const records = await listVaccinations(pet.id);
 
-      return () => {
-        active = false;
-      };
-    }
-
-    setVaccinesLoading(true);
-
-    async function loadVaccinations() {
-      try {
-        const entries = await Promise.all(
-          (data ?? []).map(async (pet) => {
-            const records = await listVaccinations(pet.id);
-
-            return {
-              petId: pet.id,
-              reminders: getVaccineReminders(records),
-            };
-          }),
-        );
-
-        if (!active) return;
-
-        const grouped: Record<string, Vaccination[]> = {};
-
-        for (const entry of entries) {
-          grouped[entry.petId] = entry.reminders;
-        }
-
-        setVaccinesByPet(grouped);
-      } catch (failure: unknown) {
-        if (active) {
-          setVaccinesError(
-            failure instanceof Error
-              ? failure.message
-              : 'Could not load vaccinations.',
+              return {
+                petId: pet.id,
+                reminders: getVaccineReminders(records),
+              };
+            }),
           );
-        }
-      } finally {
-        if (active) {
-          setVaccinesLoading(false);
+
+          if (!active) return;
+
+          const grouped: Record<string, Vaccination[]> = {};
+
+          for (const entry of entries) {
+            grouped[entry.petId] = entry.reminders;
+          }
+
+          setVaccinesByPet(grouped);
+        } catch (failure: unknown) {
+          if (active) {
+            setVaccinesError(
+              failure instanceof Error
+                ? failure.message
+                : 'Could not load vaccinations.',
+            );
+          }
+        } finally {
+          if (active) {
+            setVaccinesLoading(false);
+          }
         }
       }
-    }
 
-    void loadVaccinations();
+      void loadVaccinations();
 
-    return () => {
-      active = false;
-    };
-  }, [data, loading, error, vaccinesRetry]),
-);
-
-const allReminders = pets
-  .flatMap((pet) =>
-    (vaccinesByPet[pet.id] ?? []).map((record) => ({
-      ...record,
-      petName: pet.name,
-    })),
-  )
-  .sort((a, b) =>
-    (a.nextDueDate ?? '').localeCompare(b.nextDueDate ?? ''),
+      return () => {
+        active = false;
+      };
+    }, [data, loading, error, vaccinesRetry]),
   );
 
-const nextVaccine = allReminders[0];
+  const allReminders = pets
+    .flatMap((pet) =>
+      (vaccinesByPet[pet.id] ?? []).map((record) => ({
+        ...record,
+        petName: pet.name,
+      })),
+    )
+    .sort((a, b) =>
+      (a.nextDueDate ?? '').localeCompare(b.nextDueDate ?? ''),
+    );
 
-const nextVaccineStatus = nextVaccine?.nextDueDate
-  ? getVaccineDueStatus(nextVaccine.nextDueDate)
-  : null;
+  const nextVaccine = allReminders[0];
 
-function openVaccinations() {
-  if (loading || vaccinesLoading) return;
+  const nextVaccineStatus = nextVaccine?.nextDueDate
+    ? getVaccineDueStatus(nextVaccine.nextDueDate)
+    : null;
 
-  if (error) {
-    refresh();
-    return;
+  function openVaccinations() {
+    if (loading || vaccinesLoading) return;
+
+    if (error) {
+      refresh();
+      return;
+    }
+
+    if (vaccinesError) {
+      setVaccinesRetry((value) => value + 1);
+      return;
+    }
+
+    const petId = nextVaccine?.petId ?? pets[0]?.id;
+
+    if (petId) {
+      navigation.navigate('PetProfile', { petId });
+    } else {
+      navigation.navigate('AddPet');
+    }
   }
-
-  if (vaccinesError) {
-    setVaccinesRetry((value) => value + 1);
-    return;
-  }
-
-  const petId = nextVaccine?.petId ?? pets[0]?.id;
-
-  if (petId) {
-    navigation.navigate('PetProfile', { petId });
-  } else {
-    navigation.navigate('AddPet');
-  }
-}
 
   return (
     <SafeAreaView
@@ -245,57 +248,57 @@ function openVaccinations() {
 
           <View style={styles.quickActions}>
 
-           <Pressable
-  style={[styles.quickCard, styles.lavenderCard]}
-  onPress={openVaccinations}
-  disabled={loading || vaccinesLoading}
-  accessibilityRole="button"
-  accessibilityLabel="Open vaccination records"
->
-  <View style={styles.quickIcon}>
-    <Text>💉</Text>
-  </View>
+            <Pressable
+              style={[styles.quickCard, styles.lavenderCard]}
+              onPress={openVaccinations}
+              disabled={loading || vaccinesLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Open vaccination records"
+            >
+              <View style={styles.quickIcon}>
+                <Text>💉</Text>
+              </View>
 
-  <Text style={styles.quickTitle}>Vaccines</Text>
+              <Text style={styles.quickTitle}>Vaccines</Text>
 
-  {loading || vaccinesLoading ? (
-    <Text style={styles.quickText}>Loading reminders…</Text>
-  ) : error || vaccinesError ? (
-    <Text style={styles.quickText}>
-      Could not load. Tap to retry.
-    </Text>
-  ) : nextVaccine && nextVaccineStatus ? (
-    <>
-      <Text
-        style={[
-          styles.quickText,
-          {
-            color: nextVaccineStatus.color,
-            fontWeight: '700',
-          },
-        ]}
-      >
-        {nextVaccineStatus.label}
-      </Text>
+              {loading || vaccinesLoading ? (
+                <Text style={styles.quickText}>Loading reminders…</Text>
+              ) : error || vaccinesError ? (
+                <Text style={styles.quickText}>
+                  Could not load. Tap to retry.
+                </Text>
+              ) : nextVaccine && nextVaccineStatus ? (
+                <>
+                  <Text
+                    style={[
+                      styles.quickText,
+                      {
+                        color: nextVaccineStatus.color,
+                        fontWeight: '700',
+                      },
+                    ]}
+                  >
+                    {nextVaccineStatus.label}
+                  </Text>
 
-      <Text style={styles.quickText}>
-        {nextVaccine.petName} · {nextVaccine.vaccineName}
-        {'\n'}
-        {nextVaccine.nextDueDate}
-      </Text>
-    </>
-  ) : (
-    <Text style={styles.quickText}>
-      {pets.length === 0
-        ? 'Add your first pet'
-        : 'No due dates saved · Tap to add'}
-    </Text>
-  )}
-</Pressable>
+                  <Text style={styles.quickText}>
+                    {nextVaccine.petName} · {nextVaccine.vaccineName}
+                    {'\n'}
+                    {nextVaccine.nextDueDate}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.quickText}>
+                  {pets.length === 0
+                    ? 'Add your first pet'
+                    : 'No due dates saved · Tap to add'}
+                </Text>
+              )}
+            </Pressable>
 
             <Pressable
               style={[styles.quickCard, styles.blueCard]}
-              onPress={() => {}}
+              onPress={() => { }}
             >
               <View style={styles.quickIcon}>
                 <Text>📍</Text>
@@ -310,7 +313,7 @@ function openVaccinations() {
 
             <Pressable
               style={[styles.quickCard, styles.peachCard]}
-              onPress={() => {}}
+              onPress={() => { }}
             >
               <View style={styles.quickIcon}>
                 <Text>🥣</Text>
@@ -325,7 +328,29 @@ function openVaccinations() {
 
             <Pressable
               style={[styles.quickCard, styles.mintCard]}
-              onPress={() => {}}
+              disabled={appointments.loading || loading}
+              accessibilityRole="button"
+              onPress={() => {
+                if (appointments.error) {
+                  appointments.refresh();
+                  return;
+                }
+
+                if (error) {
+                  refresh();
+                  return;
+                }
+
+                const next = appointments.next;
+                const petId = next?.petId ?? pets[0]?.id;
+                const petName = next?.petName ?? pets[0]?.name;
+
+                if (petId && petName) {
+                  navigation.navigate('Appointments', { petId, petName });
+                } else {
+                  navigation.navigate('AddPet');
+                }
+              }}
             >
               <View style={styles.quickIcon}>
                 <Text>📅</Text>
@@ -334,7 +359,15 @@ function openVaccinations() {
               <Text style={styles.quickTitle}>Appointments</Text>
 
               <Text style={styles.quickText}>
-                Upcoming visits
+                {appointments.loading || loading
+                  ? 'Loading visits…'
+                  : appointments.error || error
+                    ? 'Could not load. Tap to retry.'
+                    : appointments.next
+                      ? `${appointments.next.petName}\n${appointments.next.date} · ${appointments.next.time}`
+                      : pets.length === 0
+                        ? 'Add your first pet'
+                        : 'No upcoming visits · Tap to manage'}
               </Text>
             </Pressable>
 
@@ -364,12 +397,16 @@ function openVaccinations() {
             <Text style={styles.sectionSubtitle}>No pets yet. Add your first companion below.</Text>}
           <View style={styles.petList}>
             {pets.map((pet, index) => {
+
               const isSelected = selectedPet === pet.id;
+              const petAppointment = appointments.upcoming.find(
+                (appointment) => appointment.petId === pet.id,
+              );
               const petVaccine = vaccinesByPet[pet.id]?.[0];
 
-const petVaccineStatus = petVaccine?.nextDueDate
-  ? getVaccineDueStatus(petVaccine.nextDueDate)
-  : null;
+              const petVaccineStatus = petVaccine?.nextDueDate
+                ? getVaccineDueStatus(petVaccine.nextDueDate)
+                : null;
               return (
                 <Pressable
                   key={pet.id}
@@ -420,35 +457,44 @@ const petVaccineStatus = petVaccine?.nextDueDate
                     <Text style={styles.petBreed}>
                       {pet.breed}
                     </Text>
+                    <Text style={[styles.quickText, { marginTop: 7, color: '#67539B' }]}>
+                      {appointments.loading
+                        ? 'Loading appointments…'
+                        : appointments.error
+                          ? 'Appointment summary unavailable'
+                          : petAppointment
+                            ? `📅 ${petAppointment.date} · ${petAppointment.time}\n${petAppointment.clinicName}`
+                            : 'No upcoming appointments'}
+                    </Text>
                     {loading || vaccinesLoading ? (
-  <Text style={styles.quickText}>Loading vaccinations…</Text>
-) : error || vaccinesError ? (
-  <Text style={styles.quickText}>
-    Vaccination summary unavailable
-  </Text>
-) : petVaccine && petVaccineStatus ? (
-  <View style={{ marginTop: 7 }}>
-    <Text
-      style={[
-        styles.quickText,
-        {
-          color: petVaccineStatus.color,
-          fontWeight: '700',
-        },
-      ]}
-    >
-      💉 {petVaccineStatus.label}
-    </Text>
+                      <Text style={styles.quickText}>Loading vaccinations…</Text>
+                    ) : error || vaccinesError ? (
+                      <Text style={styles.quickText}>
+                        Vaccination summary unavailable
+                      </Text>
+                    ) : petVaccine && petVaccineStatus ? (
+                      <View style={{ marginTop: 7 }}>
+                        <Text
+                          style={[
+                            styles.quickText,
+                            {
+                              color: petVaccineStatus.color,
+                              fontWeight: '700',
+                            },
+                          ]}
+                        >
+                          💉 {petVaccineStatus.label}
+                        </Text>
 
-    <Text style={styles.quickText}>
-      {petVaccine.vaccineName} · {petVaccine.nextDueDate}
-    </Text>
-  </View>
-) : (
-  <Text style={styles.quickText}>
-    No vaccination due date saved
-  </Text>
-)}
+                        <Text style={styles.quickText}>
+                          {petVaccine.vaccineName} · {petVaccine.nextDueDate}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.quickText}>
+                        No vaccination due date saved
+                      </Text>
+                    )}
                     <View style={styles.petTags}>
                       <View style={styles.speciesTag}>
                         <Text style={styles.speciesTagText}>

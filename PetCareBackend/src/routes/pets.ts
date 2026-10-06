@@ -85,6 +85,11 @@ petRouter.delete('/:petId', async (request, response) => {
     ownerId,
   });
 
+  await database.collection('appointments').deleteMany({
+  petId,
+  ownerId,
+});
+
   await petsCollection.deleteOne({
     _id: petId,
     ownerId,

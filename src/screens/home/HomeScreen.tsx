@@ -1,8 +1,11 @@
 ﻿import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { getCurrentUser } from '../../services/auth';import {
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
+import {
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,12 +14,10 @@ import { getCurrentUser } from '../../services/auth';import {
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import type { CompositeScreenProps } from '@react-navigation/native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { listPets } from '../../services/pets';
 import { Ionicons } from '@expo/vector-icons';
+
+import { getCurrentUser } from '../../services/auth';
+import { listPets } from '../../services/pets';
 import { listVaccinations } from '../../services/vaccinations';
 import type { Vaccination } from '../../services/vaccinations';
 
@@ -24,6 +25,10 @@ import {
   getVaccineReminders,
   getVaccineDueStatus,
 } from '../../utils/vaccinationSummary';
+
+import { useAppointmentSummary } from '../../hooks/useAppointmentSummary';
+import PetGuideModal from '../../components/PetGuideModal';
+import { careTips, findPetGuide } from '../../data/petGuides';
 
 import type {
   MainTabParamList,
@@ -48,11 +53,15 @@ interface QuickAction {
   background: string;
 }
 
+type HomeVaccineReminder = Vaccination & {
+  petName: string;
+};
+
 const quickActions: QuickAction[] = [
   {
     id: 'track',
     title: 'Track pet',
-    subtitle: 'Check their location',
+    subtitle: 'Coming soon',
     icon: 'location',
     color: '#67539B',
     background: '#EEE9FA',
@@ -60,7 +69,7 @@ const quickActions: QuickAction[] = [
   {
     id: 'appointment',
     title: 'Appointment',
-    subtitle: 'Book a vet visit',
+    subtitle: 'View saved visits',
     icon: 'calendar',
     color: '#E76F51',
     background: '#FCE8E1',
@@ -83,181 +92,266 @@ const quickActions: QuickAction[] = [
   },
 ];
 
-type HomeVaccineReminder = Vaccination & {
-  petName: string;
-};
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return 'GOOD MORNING ✨';
+  if (hour < 17) return 'GOOD AFTERNOON ☀️';
+
+  return 'GOOD EVENING 🌙';
+}
+
+function getPetEmoji(species: string) {
+  switch (species.toLowerCase()) {
+    case 'dog':
+      return '🐶';
+    case 'cat':
+      return '🐱';
+    case 'bird':
+      return '🐦';
+    case 'rabbit':
+      return '🐰';
+    default:
+      return '🐾';
+  }
+}
 
 export default function HomeScreen({ navigation }: Props) {
+  const appointments = useAppointmentSummary();
+
   const [showActions, setShowActions] = useState(false);
 
-  const [pets, setPets] = useState<
-  Awaited<ReturnType<typeof listPets>>
->([]);
-const [petsLoading, setPetsLoading] = useState(true);
-const [petsError, setPetsError] = useState('');
-const [petsRetry, setPetsRetry] = useState(0);
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(
+    null,
+  );
+  const [tipIndex, setTipIndex] = useState(0);
 
-const [vaccineReminders, setVaccineReminders] =
-  useState<HomeVaccineReminder[]>([]);
-
-const [vaccinesLoading, setVaccinesLoading] = useState(true);
-const [vaccinesError, setVaccinesError] = useState('');
-
-const nextVaccine = vaccineReminders[0];
-
-const vaccineStatus = nextVaccine?.nextDueDate
-  ? getVaccineDueStatus(nextVaccine.nextDueDate)
-  : null;
-
-useFocusEffect(
-  useCallback(() => {
-    let active = true;
-
-    setPetsLoading(true);
-    setPetsError('');
-    setPets([]);
-
-    listPets()
-      .then((savedPets) => {
-        if (active) {
-          setPets(savedPets);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setPetsError(
-            error instanceof Error
-              ? error.message
-              : 'Could not load your pets.',
-          );
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setPetsLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [petsRetry]),
-);
   const [userName, setUserName] = useState('');
-const [nameError, setNameError] = useState('');
-const [nameRetry, setNameRetry] = useState(0);
+  const [nameError, setNameError] = useState('');
+  const [nameRetry, setNameRetry] = useState(0);
+  const [greeting, setGreeting] = useState(getGreeting);
 
-useFocusEffect(
-  useCallback(() => {
-    let active = true;
+  const [pets, setPets] = useState<
+    Awaited<ReturnType<typeof listPets>>
+  >([]);
+  const [petsLoading, setPetsLoading] = useState(true);
+  const [petsError, setPetsError] = useState('');
+  const [petsRetry, setPetsRetry] = useState(0);
 
-    setPetsLoading(true);
-    setPetsError('');
-    setPets([]);
+  const [vaccineReminders, setVaccineReminders] = useState<
+    HomeVaccineReminder[]
+  >([]);
+  const [vaccinesLoading, setVaccinesLoading] = useState(true);
+  const [vaccinesError, setVaccinesError] = useState('');
 
-    setVaccinesLoading(true);
-    setVaccinesError('');
-    setVaccineReminders([]);
+  const selectedGuide = selectedGuideId
+    ? findPetGuide(selectedGuideId)
+    : null;
 
-    async function loadHomePets() {
-      let savedPets: Awaited<ReturnType<typeof listPets>>;
+  const currentTip =
+    careTips[tipIndex] ??
+    'Keep your pet’s records and clinic contact details together.';
 
-      try {
-        savedPets = await listPets();
-      } catch (error: unknown) {
-        if (active) {
-          setPetsError(
+  const nextVaccine = vaccineReminders[0];
+
+  const vaccineStatus = nextVaccine?.nextDueDate
+    ? getVaccineDueStatus(nextVaccine.nextDueDate)
+    : null;
+
+  // Load the signed-in user's name whenever Home is focused.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      setGreeting(getGreeting());
+      setNameError('');
+
+      async function loadName() {
+        try {
+          const user = await getCurrentUser();
+
+          if (!active) return;
+
+          setUserName(user?.name ?? '');
+        } catch (error: unknown) {
+          if (!active) return;
+
+          setNameError(
             error instanceof Error
               ? error.message
-              : 'Could not load your pets.',
+              : 'Could not load your name.',
           );
-
-          setVaccinesError('Could not load vaccination reminders.');
-          setPetsLoading(false);
-          setVaccinesLoading(false);
         }
-
-        return;
       }
 
-      if (!active) return;
+      void loadName();
 
-      setPets(savedPets);
-      setPetsLoading(false);
+      return () => {
+        active = false;
+      };
+    }, [nameRetry]),
+  );
 
-      try {
-        const remindersByPet = await Promise.all(
-          savedPets.map(async (pet) => {
-            const records = await listVaccinations(pet.id);
+  // Load pets once, then load each pet's vaccination reminders.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-            return getVaccineReminders(records).map((record) => ({
-              ...record,
-              petName: pet.name,
-            }));
-          }),
-        );
+      setPetsLoading(true);
+      setPetsError('');
+      setPets([]);
 
-        const reminders = remindersByPet
-          .flat()
-          .sort((a, b) =>
-            (a.nextDueDate ?? '').localeCompare(b.nextDueDate ?? ''),
+      setVaccinesLoading(true);
+      setVaccinesError('');
+      setVaccineReminders([]);
+
+      async function loadHomePets() {
+        let savedPets: Awaited<ReturnType<typeof listPets>>;
+
+        try {
+          savedPets = await listPets();
+        } catch (error: unknown) {
+          if (active) {
+            setPetsError(
+              error instanceof Error
+                ? error.message
+                : 'Could not load your pets.',
+            );
+
+            setVaccinesError(
+              'Could not load vaccination reminders.',
+            );
+
+            setPetsLoading(false);
+            setVaccinesLoading(false);
+          }
+
+          return;
+        }
+
+        if (!active) return;
+
+        setPets(savedPets);
+        setPetsLoading(false);
+
+        try {
+          const remindersByPet = await Promise.all(
+            savedPets.map(async (pet) => {
+              const records = await listVaccinations(pet.id);
+
+              return getVaccineReminders(records).map((record) => ({
+                ...record,
+                petName: pet.name,
+              }));
+            }),
           );
 
-        if (active) {
-          setVaccineReminders(reminders);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setVaccinesError(
-            error instanceof Error
-              ? error.message
-              : 'Could not load vaccination reminders.',
-          );
-        }
-      } finally {
-        if (active) {
-          setVaccinesLoading(false);
+          const reminders = remindersByPet
+            .flat()
+            .sort((a, b) =>
+              (a.nextDueDate ?? '').localeCompare(
+                b.nextDueDate ?? '',
+              ),
+            );
+
+          if (active) {
+            setVaccineReminders(reminders);
+          }
+        } catch (error: unknown) {
+          if (active) {
+            setVaccinesError(
+              error instanceof Error
+                ? error.message
+                : 'Could not load vaccination reminders.',
+            );
+          }
+        } finally {
+          if (active) {
+            setVaccinesLoading(false);
+          }
         }
       }
+
+      void loadHomePets();
+
+      return () => {
+        active = false;
+      };
+    }, [petsRetry]),
+  );
+
+  function openAppointments() {
+    if (appointments.loading) {
+      Alert.alert(
+        'Appointments',
+        'Your appointments are loading.',
+      );
+      return;
     }
 
-    void loadHomePets();
+    if (appointments.error) {
+      appointments.refresh();
+      return;
+    }
 
-    return () => {
-      active = false;
-    };
-  }, [petsRetry]),
-);
+    if (appointments.next) {
+      navigation.navigate('Appointments', {
+        petId: appointments.next.petId,
+        petName: appointments.next.petName,
+      });
+      return;
+    }
+
+    navigation.navigate('MyPets');
+  }
+
+  function openVaccinations() {
+    if (vaccinesLoading) {
+      Alert.alert(
+        'Vaccinations',
+        'Your reminders are loading.',
+      );
+      return;
+    }
+
+    if (vaccinesError) {
+      setPetsRetry((value) => value + 1);
+      return;
+    }
+
+    if (nextVaccine) {
+      navigation.navigate('PetProfile', {
+        petId: nextVaccine.petId,
+      });
+      return;
+    }
+
+    navigation.navigate('MyPets');
+  }
+
+  function showAiMessage() {
+    Alert.alert(
+      'JEEVA AI · Coming soon',
+      'The AI assistant is not available yet. You can read the pet guides for everyday care information.',
+    );
+  }
 
   function handleQuickAction(id: string) {
     switch (id) {
       case 'track':
         Alert.alert(
-          'Track your pet',
-          'Pet tracking will open here once your GPS tracking feature is connected.',
+          'Tracking · Coming soon',
+          'Live pet tracking is not available yet.',
         );
         break;
 
       case 'appointment':
-        Alert.alert(
-          'Appointments',
-          'Your appointment booking feature will be connected here.',
-        );
+        openAppointments();
         break;
 
       case 'vaccine':
-  if (vaccinesLoading) {
-    Alert.alert('Vaccinations', 'Your reminders are loading.');
-  } else if (vaccinesError) {
-    setPetsRetry((value) => value + 1);
-  } else if (nextVaccine) {
-    navigation.navigate('PetProfile', {
-      petId: nextVaccine.petId,
-    });
-  } else {
-    navigation.navigate('MyPets');
-  }
-  break;
+        openVaccinations();
+        break;
 
       case 'guide':
         navigation.navigate('Explore');
@@ -268,42 +362,50 @@ useFocusEffect(
     }
   }
 
+  function showNextTip() {
+    if (careTips.length === 0) return;
+
+    setTipIndex((value) => (value + 1) % careTips.length);
+  }
+
   return (
     <SafeAreaView
       style={styles.screen}
       edges={['top', 'left', 'right']}
     >
+      <PetGuideModal
+        guide={selectedGuide}
+        onClose={() => setSelectedGuideId(null)}
+      />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.content}>
-
-          {/* =====================================
-              TOP HEADER
-          ===================================== */}
+          {/* HEADER */}
 
           <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>
-                GOOD MORNING ✨
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>{greeting}</Text>
+
+              <Text style={styles.title}>
+                {userName ? `Hello, ${userName}` : 'Hello'}
               </Text>
 
-             <Text style={styles.title}>
-  {userName ? `Hello, ${userName}` : 'Hello'}
-</Text>
-
-{!!nameError && (
-  <Pressable
-    onPress={() => setNameRetry((value) => value + 1)}
-    accessibilityRole="button"
-    style={{ paddingVertical: 8 }}
-  >
-    <Text style={{ color: '#C45B45', fontSize: 11 }}>
-      Could not load your name. Tap to retry.
-    </Text>
-  </Pressable>
-)}
+              {!!nameError && (
+                <Pressable
+                  onPress={() =>
+                    setNameRetry((value) => value + 1)
+                  }
+                  accessibilityRole="button"
+                  style={styles.retryNameButton}
+                >
+                  <Text style={styles.retryNameText}>
+                    Could not load your name. Tap to retry.
+                  </Text>
+                </Pressable>
+              )}
 
               <Text style={styles.subtitle}>
                 Let's make today special for them.
@@ -323,14 +425,10 @@ useFocusEffect(
                 size={23}
                 color={colors.forest}
               />
-
-              <View style={styles.notificationDot} />
             </Pressable>
           </View>
 
-          {/* =====================================
-              PET OVERVIEW CARD
-          ===================================== */}
+          {/* PET OVERVIEW */}
 
           <View style={styles.petHeroCard}>
             <View style={styles.petHeroText}>
@@ -340,7 +438,6 @@ useFocusEffect(
                   size={12}
                   color="#E76F51"
                 />
-
                 <Text style={styles.smallPillText}>
                   YOUR PET FAMILY
                 </Text>
@@ -355,15 +452,14 @@ useFocusEffect(
               </Text>
 
               <Text style={styles.petHeroDescription}>
-                Keep their health, food, appointments
-                and everyday care beautifully organised.
+                Keep their health, appointments and everyday
+                care beautifully organised.
               </Text>
 
               <Pressable
                 style={styles.viewPetsButton}
-                onPress={() =>
-                  navigation.navigate('MyPets')
-                }
+                onPress={() => navigation.navigate('MyPets')}
+                accessibilityRole="button"
               >
                 <Text style={styles.viewPetsText}>
                   View my pets
@@ -379,136 +475,152 @@ useFocusEffect(
 
             <View style={styles.heroDecoration}>
               <View style={styles.heroCircle}>
-                <Text style={styles.heroEmoji}>
-                  🐶
-                </Text>
+                <Text style={styles.heroEmoji}>🐶</Text>
               </View>
 
               <View style={styles.heroSmallCircle}>
-                <Text style={styles.heroSmallEmoji}>
-                  🐱
-                </Text>
+                <Text style={styles.heroSmallEmoji}>🐱</Text>
               </View>
             </View>
           </View>
-                {/* SAVED PETS */}
-<View style={styles.sectionHeader}>
-  <View>
-    <Text style={styles.sectionTitle}>My pets</Text>
 
-    <Text style={styles.sectionSubtitle}>
-      Your little family, all in one place
-    </Text>
-  </View>
-
-  <Pressable
-    onPress={() => navigation.navigate('AddPet')}
-    accessibilityRole="button"
-    accessibilityLabel="Add a pet"
-    style={styles.plusButton}
-  >
-    <Ionicons name="add" size={23} color="#FFFFFF" />
-  </Pressable>
-</View>
-
-{petsLoading ? (
-  <View style={homePetStyles.messageCard}>
-    <Text style={homePetStyles.detail}>Loading your pets…</Text>
-  </View>
-) : petsError ? (
-  <View style={homePetStyles.messageCard}>
-    <Text style={homePetStyles.error}>{petsError}</Text>
-
-    <Pressable
-      onPress={() => setPetsRetry((value) => value + 1)}
-      accessibilityRole="button"
-      style={homePetStyles.actionButton}
-    >
-      <Text style={homePetStyles.actionText}>Try again</Text>
-    </Pressable>
-  </View>
-) : pets.length === 0 ? (
-  <View style={homePetStyles.messageCard}>
-    <Text style={homePetStyles.emoji}>🐾</Text>
-
-    <Text style={homePetStyles.name}>Meet your pet family</Text>
-
-    <Text style={homePetStyles.detail}>
-      Add your first pet to start organising their care.
-    </Text>
-
-    <Pressable
-      onPress={() => navigation.navigate('AddPet')}
-      accessibilityRole="button"
-      style={homePetStyles.actionButton}
-    >
-      <Text style={homePetStyles.actionText}>
-        Add your first pet
-      </Text>
-    </Pressable>
-  </View>
-) : (
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={homePetStyles.list}
-  >
-    {pets.map((pet) => (
-      <Pressable
-        key={pet.id}
-        onPress={() =>
-          navigation.navigate('PetProfile', { petId: pet.id })
-        }
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${pet.name}'s profile`}
-        style={({ pressed }) => [
-          homePetStyles.card,
-          pressed && styles.pressed,
-        ]}
-      >
-        <View style={homePetStyles.avatar}>
-          <Text style={homePetStyles.emoji}>
-            {pet.species === 'dog'
-              ? '🐶'
-              : pet.species === 'cat'
-                ? '🐱'
-                : pet.species === 'bird'
-                  ? '🐦'
-                  : pet.species === 'rabbit'
-                    ? '🐰'
-                    : '🐾'}
-          </Text>
-        </View>
-
-        <Text style={homePetStyles.name} numberOfLines={1}>
-          {pet.name}
-        </Text>
-
-        <Text style={homePetStyles.detail} numberOfLines={1}>
-          {pet.breed?.trim() ||
-            pet.species.charAt(0).toUpperCase() +
-              pet.species.slice(1)}
-        </Text>
-
-        <View style={homePetStyles.profileLink}>
-          <Text style={homePetStyles.linkText}>View profile</Text>
-
-          <Ionicons
-            name="arrow-forward"
-            size={15}
-            color="#67539B"
-          />
-        </View>
-      </Pressable>
-    ))}
-  </ScrollView>
-)}
-          {/* =====================================
-              TODAY'S CARE
-          ===================================== */}
+          {/* SAVED PETS */}
 
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeading}>
+              <Text style={styles.sectionTitle}>My pets</Text>
+
+              <Text style={styles.sectionSubtitle}>
+                Your little family, all in one place
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={() => navigation.navigate('AddPet')}
+              accessibilityRole="button"
+              accessibilityLabel="Add a pet"
+              style={styles.plusButton}
+            >
+              <Ionicons
+                name="add"
+                size={23}
+                color="#FFFFFF"
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.petListSection}>
+            {petsLoading ? (
+              <View style={homePetStyles.messageCard}>
+                <Text style={homePetStyles.detail}>
+                  Loading your pets…
+                </Text>
+              </View>
+            ) : petsError ? (
+              <View style={homePetStyles.messageCard}>
+                <Text style={homePetStyles.error}>
+                  {petsError}
+                </Text>
+
+                <Pressable
+                  onPress={() =>
+                    setPetsRetry((value) => value + 1)
+                  }
+                  accessibilityRole="button"
+                  style={homePetStyles.actionButton}
+                >
+                  <Text style={homePetStyles.actionText}>
+                    Try again
+                  </Text>
+                </Pressable>
+              </View>
+            ) : pets.length === 0 ? (
+              <View style={homePetStyles.messageCard}>
+                <Text style={homePetStyles.emoji}>🐾</Text>
+
+                <Text style={homePetStyles.name}>
+                  Meet your pet family
+                </Text>
+
+                <Text style={homePetStyles.detail}>
+                  Add your first pet to start organising their
+                  care.
+                </Text>
+
+                <Pressable
+                  onPress={() => navigation.navigate('AddPet')}
+                  accessibilityRole="button"
+                  style={homePetStyles.actionButton}
+                >
+                  <Text style={homePetStyles.actionText}>
+                    Add your first pet
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={homePetStyles.list}
+              >
+                {pets.map((pet) => (
+                  <Pressable
+                    key={pet.id}
+                    onPress={() =>
+                      navigation.navigate('PetProfile', {
+                        petId: pet.id,
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${pet.name}'s profile`}
+                    style={({ pressed }) => [
+                      homePetStyles.card,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={homePetStyles.avatar}>
+                      <Text style={homePetStyles.emoji}>
+                        {getPetEmoji(pet.species)}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={homePetStyles.name}
+                      numberOfLines={1}
+                    >
+                      {pet.name}
+                    </Text>
+
+                    <Text
+                      style={homePetStyles.detail}
+                      numberOfLines={1}
+                    >
+                      {pet.breed?.trim() ||
+                        pet.species.charAt(0).toUpperCase() +
+                          pet.species.slice(1)}
+                    </Text>
+
+                    <View style={homePetStyles.profileLink}>
+                      <Text style={homePetStyles.linkText}>
+                        View profile
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={15}
+                        color="#67539B"
+                      />
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* TODAY'S CARE */}
+
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>
                 Today's care
               </Text>
@@ -519,10 +631,17 @@ useFocusEffect(
             </View>
 
             <Pressable
-              onPress={() => setShowActions(!showActions)}
+              onPress={() =>
+                setShowActions((value) => !value)
+              }
               style={styles.plusButton}
               accessibilityRole="button"
-              accessibilityLabel="Show quick actions"
+              accessibilityLabel={
+                showActions
+                  ? 'Hide quick actions'
+                  : 'Show quick actions'
+              }
+              accessibilityState={{ expanded: showActions }}
             >
               <Ionicons
                 name={showActions ? 'close' : 'add'}
@@ -532,10 +651,7 @@ useFocusEffect(
             </Pressable>
           </View>
 
-            
-          {/* =====================================
-              QUICK ACTIONS
-          ===================================== */}
+          {/* QUICK ACTIONS */}
 
           {showActions && (
             <View style={styles.quickActionsGrid}>
@@ -549,14 +665,12 @@ useFocusEffect(
                   onPress={() =>
                     handleQuickAction(action.id)
                   }
+                  accessibilityRole="button"
                 >
                   <View
                     style={[
                       styles.quickActionIcon,
-                      {
-                        backgroundColor:
-                          action.background,
-                      },
+                      { backgroundColor: action.background },
                     ]}
                   >
                     <Ionicons
@@ -578,9 +692,7 @@ useFocusEffect(
             </View>
           )}
 
-          {/* =====================================
-              TRACK YOUR PET
-          ===================================== */}
+          {/* TRACKING */}
 
           <Pressable
             style={({ pressed }) => [
@@ -589,7 +701,7 @@ useFocusEffect(
             ]}
             onPress={() => handleQuickAction('track')}
             accessibilityRole="button"
-            accessibilityLabel="Track your pet"
+            accessibilityLabel="Pet tracking, coming soon"
           >
             <View style={styles.trackingIcon}>
               <Ionicons
@@ -609,147 +721,278 @@ useFocusEffect(
               </Text>
 
               <Text style={styles.trackingDescription}>
-                See their latest location when tracking
-                is enabled.
+                Coming soon · Live tracking is not available yet.
               </Text>
             </View>
 
             <View style={styles.arrowCircle}>
               <Ionicons
-                name="arrow-forward"
-                size={17}
+                name="chevron-forward"
+                size={18}
                 color="#67539B"
               />
             </View>
           </Pressable>
 
-          {/* =====================================
-              VACCINATION REMINDER
-          ===================================== */}
+          {/* APPOINTMENTS */}
 
-          <View style={styles.vaccineCard}>
-  <View style={styles.vaccineIcon}>
-    <Ionicons name="medical" size={23} color="#E76F51" />
-  </View>
-
-  <View style={styles.vaccineContent}>
-    <View style={styles.vaccineTopRow}>
-      <Text style={styles.vaccineLabel}>
-        VACCINATION REMINDER
-      </Text>
-
-      {!vaccinesLoading && !vaccinesError && vaccineStatus && (
-        <View style={styles.upcomingBadge}>
-          <Text
+          <View
             style={[
-              styles.upcomingText,
-              { color: vaccineStatus.color },
+              styles.vaccineCard,
+              styles.appointmentCard,
             ]}
           >
-            {vaccineStatus.label.toUpperCase()}
-          </Text>
-        </View>
-      )}
-    </View>
+            <View
+              style={[
+                styles.vaccineIcon,
+                styles.appointmentIcon,
+              ]}
+            >
+              <Ionicons
+                name="calendar"
+                size={23}
+                color="#537CB0"
+              />
+            </View>
 
-    {vaccinesLoading ? (
-      <Text style={styles.vaccineDescription}>
-        Loading vaccination reminders…
-      </Text>
-    ) : vaccinesError ? (
-      <>
-        <Text style={styles.vaccineDescription}>
-          {vaccinesError}
-        </Text>
+            <View style={styles.vaccineContent}>
+              <Text
+                style={[
+                  styles.vaccineLabel,
+                  styles.appointmentLabel,
+                ]}
+              >
+                NEXT APPOINTMENT
+              </Text>
 
-        <Pressable
-          onPress={() => setPetsRetry((value) => value + 1)}
-          accessibilityRole="button"
-          style={{ paddingVertical: 10 }}
-        >
-          <Text style={styles.manageReminder}>Try again →</Text>
-        </Pressable>
-      </>
-    ) : nextVaccine && vaccineStatus ? (
-      <>
-        <Text style={styles.vaccineTitle}>
-          {nextVaccine.petName} · {nextVaccine.vaccineName}
-        </Text>
+              {appointments.loading ? (
+                <Text style={styles.vaccineDescription}>
+                  Loading appointments…
+                </Text>
+              ) : appointments.error ? (
+                <>
+                  <Text style={styles.vaccineDescription}>
+                    {appointments.error}
+                  </Text>
 
-        <Text style={styles.vaccineDescription}>
-          {vaccineStatus.description}
-          {'\n'}
-          Due date: {nextVaccine.nextDueDate}
-        </Text>
+                  <Pressable
+                    onPress={() => appointments.refresh()}
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                  >
+                    <Text
+                      style={[
+                        styles.manageReminder,
+                        styles.appointmentLabel,
+                      ]}
+                    >
+                      Try again →
+                    </Text>
+                  </Pressable>
+                </>
+              ) : appointments.next ? (
+                <>
+                  <Text style={styles.vaccineTitle}>
+                    {appointments.next.petName} ·{' '}
+                    {appointments.next.clinicName}
+                  </Text>
 
-        {vaccineReminders.length > 1 && (
-          <Text style={styles.vaccineDescription}>
-            {vaccineReminders.length - 1} other vaccine
-            {vaccineReminders.length === 2 ? '' : 's'} with due dates
-          </Text>
-        )}
+                  <Text style={styles.vaccineDescription}>
+                    {appointments.next.date} at{' '}
+                    {appointments.next.time}
+                    {'\n'}
+                    {appointments.next.reason}
+                  </Text>
 
-        <Pressable
-          onPress={() =>
-            navigation.navigate('PetProfile', {
-              petId: nextVaccine.petId,
-            })
-          }
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${nextVaccine.petName}'s vaccination records`}
-          style={{ paddingVertical: 10 }}
-        >
-          <Text style={styles.manageReminder}>
-            View vaccination records →
-          </Text>
-        </Pressable>
-      </>
-    ) : (
-      <>
-        <Text style={styles.vaccineTitle}>
-          No vaccination due dates saved
-        </Text>
+                  {!!appointments.next.vetName && (
+                    <Text style={styles.vaccineDescription}>
+                      Vet: {appointments.next.vetName}
+                    </Text>
+                  )}
 
-        <Text style={styles.vaccineDescription}>
-          Add your vet’s next due date to a pet’s vaccination record.
-        </Text>
+                  {appointments.count > 1 && (
+                    <Text style={styles.vaccineDescription}>
+                      {appointments.count - 1} other upcoming
+                      {' '}
+                      {appointments.count === 2
+                        ? 'appointment'
+                        : 'appointments'}
+                    </Text>
+                  )}
 
-        <Pressable
-          onPress={() => navigation.navigate('MyPets')}
-          accessibilityRole="button"
-          style={{ paddingVertical: 10 }}
-        >
-          <Text style={styles.manageReminder}>
-            Open my pets →
-          </Text>
-        </Pressable>
-      </>
-    )}
-  </View>
-</View>
+                  <Pressable
+                    onPress={openAppointments}
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                  >
+                    <Text
+                      style={[
+                        styles.manageReminder,
+                        styles.appointmentLabel,
+                      ]}
+                    >
+                      Manage appointments →
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.vaccineTitle}>
+                    No upcoming appointments
+                  </Text>
 
-          {/* =====================================
-              COMMUNITY
-          ===================================== */}
+                  <Text style={styles.vaccineDescription}>
+                    Select a pet to record a visit or view
+                    appointment history.
+                  </Text>
+
+                  <Pressable
+                    onPress={openAppointments}
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                  >
+                    <Text
+                      style={[
+                        styles.manageReminder,
+                        styles.appointmentLabel,
+                      ]}
+                    >
+                      Choose a pet →
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* VACCINATION REMINDER */}
+
+          <View style={styles.vaccineCard}>
+            <View style={styles.vaccineIcon}>
+              <Ionicons
+                name="medical"
+                size={23}
+                color="#E76F51"
+              />
+            </View>
+
+            <View style={styles.vaccineContent}>
+              <View style={styles.vaccineTopRow}>
+                <Text style={styles.vaccineLabel}>
+                  VACCINATION REMINDER
+                </Text>
+
+                {!vaccinesLoading &&
+                  !vaccinesError &&
+                  vaccineStatus && (
+                    <View style={styles.upcomingBadge}>
+                      <Text
+                        style={[
+                          styles.upcomingText,
+                          { color: vaccineStatus.color },
+                        ]}
+                      >
+                        {vaccineStatus.label.toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+              </View>
+
+              {vaccinesLoading ? (
+                <Text style={styles.vaccineDescription}>
+                  Loading vaccination reminders…
+                </Text>
+              ) : vaccinesError ? (
+                <>
+                  <Text style={styles.vaccineDescription}>
+                    {vaccinesError}
+                  </Text>
+
+                  <Pressable
+                    onPress={() =>
+                      setPetsRetry((value) => value + 1)
+                    }
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                  >
+                    <Text style={styles.manageReminder}>
+                      Try again →
+                    </Text>
+                  </Pressable>
+                </>
+              ) : nextVaccine && vaccineStatus ? (
+                <>
+                  <Text style={styles.vaccineTitle}>
+                    {nextVaccine.petName} ·{' '}
+                    {nextVaccine.vaccineName}
+                  </Text>
+
+                  <Text style={styles.vaccineDescription}>
+                    {vaccineStatus.description}
+                    {'\n'}
+                    Due date: {nextVaccine.nextDueDate}
+                  </Text>
+
+                  {vaccineReminders.length > 1 && (
+                    <Text style={styles.vaccineDescription}>
+                      {vaccineReminders.length - 1} other vaccine
+                      {vaccineReminders.length === 2 ? '' : 's'}
+                      {' '}with due dates
+                    </Text>
+                  )}
+
+                  <Pressable
+                    onPress={openVaccinations}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${nextVaccine.petName}'s vaccination records`}
+                    style={styles.textButton}
+                  >
+                    <Text style={styles.manageReminder}>
+                      View vaccination records →
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.vaccineTitle}>
+                    No vaccination due dates saved
+                  </Text>
+
+                  <Text style={styles.vaccineDescription}>
+                    Add your vet’s next due date to a pet’s
+                    vaccination record.
+                  </Text>
+
+                  <Pressable
+                    onPress={() =>
+                      navigation.navigate('MyPets')
+                    }
+                    accessibilityRole="button"
+                    style={styles.textButton}
+                  >
+                    <Text style={styles.manageReminder}>
+                      Open my pets →
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* COMMUNITY */}
 
           <View style={styles.communityCard}>
             <View style={styles.communityIllustration}>
               <View style={styles.communityBubbleOne}>
-                <Text style={styles.communityEmoji}>
-                  🐕
-                </Text>
+                <Text style={styles.communityEmoji}>🐕</Text>
               </View>
 
               <View style={styles.communityBubbleTwo}>
-                <Text style={styles.communityEmoji}>
-                  🐈
-                </Text>
+                <Text style={styles.communityEmoji}>🐈</Text>
               </View>
 
               <View style={styles.communityBubbleThree}>
-                <Text style={styles.communityEmoji}>
-                  🐰
-                </Text>
+                <Text style={styles.communityEmoji}>🐰</Text>
               </View>
             </View>
 
@@ -763,8 +1006,8 @@ useFocusEffect(
               </Text>
 
               <Text style={styles.communityDescription}>
-                Connect with animal lovers, rescuers,
-                shelters and pet parents.
+                A space for animal lovers and pet parents.
+                Explore the community preview.
               </Text>
 
               <Pressable
@@ -772,6 +1015,7 @@ useFocusEffect(
                 onPress={() =>
                   navigation.navigate('Community')
                 }
+                accessibilityRole="button"
               >
                 <Text style={styles.communityButtonText}>
                   Explore community
@@ -786,12 +1030,49 @@ useFocusEffect(
             </View>
           </View>
 
-          {/* =====================================
-              PET GUIDE
-          ===================================== */}
+          {/* CARE TIP */}
+
+          <View style={styles.tipCard}>
+            <View style={styles.tipHeader}>
+              <View style={styles.tipHeading}>
+                <Ionicons
+                  name="bulb-outline"
+                  size={20}
+                  color="#D49A3A"
+                />
+
+                <Text style={styles.tipTitle}>
+                  A little care tip
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={showNextTip}
+                accessibilityRole="button"
+                accessibilityLabel="Show another care tip"
+                style={styles.tipButton}
+              >
+                <Text style={styles.tipButtonText}>
+                  Another tip
+                </Text>
+
+                <Ionicons
+                  name="refresh"
+                  size={14}
+                  color="#67539B"
+                />
+              </Pressable>
+            </View>
+
+            <Text style={styles.tipDescription}>
+              {currentTip}
+            </Text>
+          </View>
+
+          {/* PET GUIDES */}
 
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>
                 Pet guide
               </Text>
@@ -802,18 +1083,15 @@ useFocusEffect(
             </View>
 
             <Pressable
-              onPress={() =>
-                navigation.navigate('Explore')
-              }
+              onPress={() => navigation.navigate('Explore')}
+              accessibilityRole="button"
+              style={styles.textButton}
             >
-              <Text style={styles.seeAll}>
-                See all
-              </Text>
+              <Text style={styles.seeAll}>See all</Text>
             </Pressable>
           </View>
 
           <View style={styles.guideRow}>
-
             <Pressable
               style={({ pressed }) => [
                 styles.guideCard,
@@ -821,8 +1099,10 @@ useFocusEffect(
                 pressed && styles.pressed,
               ]}
               onPress={() =>
-                navigation.navigate('Explore')
+                setSelectedGuideId('nutrition')
               }
+              accessibilityRole="button"
+              accessibilityLabel="Read the food and meals guide"
             >
               <View style={styles.guideIconFood}>
                 <Ionicons
@@ -837,11 +1117,12 @@ useFocusEffect(
               </Text>
 
               <Text style={styles.guideDescription}>
-                Portions, healthy meals & what to avoid.
+                Everyday feeding, fresh water and helpful
+                routines.
               </Text>
 
               <Text style={styles.guideArrow}>
-                Explore →
+                Read guide →
               </Text>
             </Pressable>
 
@@ -852,37 +1133,45 @@ useFocusEffect(
                 pressed && styles.pressed,
               ]}
               onPress={() =>
-                navigation.navigate('Explore')
+                setSelectedGuideId('daily-care')
               }
+              accessibilityRole="button"
+              accessibilityLabel="Read the everyday care guide"
             >
               <View style={styles.guideIconLaw}>
                 <Ionicons
-                  name="shield-checkmark"
+                  name="heart"
                   size={23}
                   color="#3A8D8A"
                 />
               </View>
 
               <Text style={styles.guideTitle}>
-                Animal laws
+                Everyday care
               </Text>
 
               <Text style={styles.guideDescription}>
-                Know existing rights and protections.
+                Simple checklists and an organised care
+                routine.
               </Text>
 
               <Text style={styles.guideArrow}>
-                Learn more →
+                Read guide →
               </Text>
             </Pressable>
-
           </View>
 
-          {/* =====================================
-              COMMUNITY / SHELTER BANNER
-          ===================================== */}
+          {/* COMMUNITY BANNER */}
 
-          <View style={styles.rescueBanner}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.rescueBanner,
+              pressed && styles.pressed,
+            ]}
+            onPress={() => navigation.navigate('Community')}
+            accessibilityRole="button"
+            accessibilityLabel="Explore the community"
+          >
             <View style={styles.rescueIcon}>
               <Ionicons
                 name="paw"
@@ -897,8 +1186,8 @@ useFocusEffect(
               </Text>
 
               <Text style={styles.rescueDescription}>
-                Discover shelters, adoption drives and
-                ways to support animals around you.
+                Explore JEEVA’s community space for people
+                who care about animals.
               </Text>
             </View>
 
@@ -907,90 +1196,75 @@ useFocusEffect(
               size={20}
               color="#FFFFFF"
             />
-          </View>
+          </Pressable>
 
-          {/* =====================================
-              JEEVA AI SPACE
-          ===================================== */}
+          {/* AI INFORMATION */}
 
-          <View style={styles.aiInfoCard}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.aiInfoCard,
+              pressed && styles.pressed,
+            ]}
+            onPress={showAiMessage}
+            accessibilityRole="button"
+            accessibilityLabel="JEEVA AI, coming soon"
+          >
             <View style={styles.aiIcon}>
-              <Text style={styles.aiSparkle}>
-                ✦
-              </Text>
+              <Text style={styles.aiSparkle}>✦</Text>
             </View>
 
             <View style={styles.aiText}>
               <Text style={styles.aiTitle}>
-                JEEVA AI
+                JEEVA AI · Coming soon
               </Text>
 
               <Text style={styles.aiDescription}>
-                Ask about pet care, food, behaviour or
-                everyday concerns.
+                Your pet-care assistant is on the way.
+                Explore our care guides in the meantime.
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.bottomSpace} />
-
         </View>
       </ScrollView>
 
-      {/* =====================================
-          JEEVA AI FLOATING BUTTON
-      ===================================== */}
+      {/* FLOATING AI BUTTON */}
 
       <Pressable
         style={({ pressed }) => [
           styles.aiFloatingButton,
           pressed && styles.aiFloatingPressed,
         ]}
-        onPress={() =>
-          Alert.alert(
-            'JEEVA AI',
-            'Your AI pet-care assistant will open here. You can ask about food, behaviour, health and everyday pet care.',
-          )
-        }
+        onPress={showAiMessage}
         accessibilityRole="button"
-        accessibilityLabel="Open JEEVA AI"
+        accessibilityLabel="JEEVA AI, coming soon"
       >
         <View style={styles.aiFloatingInner}>
-          <Text style={styles.aiFloatingSparkle}>
-            ✦
-          </Text>
+          <Text style={styles.aiFloatingSparkle}>✦</Text>
         </View>
-
-        <View style={styles.aiOnlineDot} />
       </Pressable>
-
     </SafeAreaView>
   );
 }
-
-/* =====================================================
-   STYLES
-===================================================== */
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F9F7F2',
   },
-
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 40,
   },
-
   content: {
     width: '100%',
     maxWidth: 600,
     alignSelf: 'center',
   },
 
-  /* HEADER */
+  // Header
 
   header: {
     flexDirection: 'row',
@@ -998,7 +1272,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 22,
   },
-
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
+  },
   greeting: {
     color: '#8D877E',
     fontSize: 10,
@@ -1006,20 +1283,24 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 5,
   },
-
   title: {
     color: '#20352F',
     fontSize: 27,
     fontWeight: '800',
     letterSpacing: -0.7,
   },
-
   subtitle: {
     color: '#85827B',
     fontSize: 13,
     marginTop: 4,
   },
-
+  retryNameButton: {
+    paddingVertical: 8,
+  },
+  retryNameText: {
+    color: '#C45B45',
+    fontSize: 11,
+  },
   notificationButton: {
     width: 46,
     height: 46,
@@ -1032,26 +1313,11 @@ const styles = StyleSheet.create({
     shadowColor: '#20352F',
     shadowOpacity: 0.06,
     shadowRadius: 10,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
 
-  notificationDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#E76F51',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-
-  /* HERO */
+  // Hero
 
   petHeroCard: {
     minHeight: 220,
@@ -1062,12 +1328,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 28,
   },
-
   petHeroText: {
     flex: 1,
     zIndex: 2,
   },
-
   smallPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1079,28 +1343,24 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginBottom: 15,
   },
-
   smallPillText: {
     color: '#67539B',
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.8,
   },
-
   petHeroTitle: {
     color: '#20352F',
     fontSize: 25,
     fontWeight: '800',
     letterSpacing: -0.8,
   },
-
   petHeroTitleAccent: {
     color: '#67539B',
     fontSize: 25,
     fontWeight: '800',
     letterSpacing: -0.8,
   },
-
   petHeroDescription: {
     color: '#68636A',
     fontSize: 12,
@@ -1108,7 +1368,6 @@ const styles = StyleSheet.create({
     marginTop: 9,
     maxWidth: 230,
   },
-
   viewPetsButton: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1120,13 +1379,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: 15,
   },
-
   viewPetsText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
   },
-
   heroDecoration: {
     width: 125,
     height: 180,
@@ -1134,7 +1391,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   heroCircle: {
     width: 125,
     height: 125,
@@ -1143,11 +1399,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   heroEmoji: {
     fontSize: 70,
   },
-
   heroSmallCircle: {
     position: 'absolute',
     right: -4,
@@ -1161,12 +1415,11 @@ const styles = StyleSheet.create({
     borderWidth: 5,
     borderColor: '#EAE5F5',
   },
-
   heroSmallEmoji: {
     fontSize: 35,
   },
 
-  /* SECTION HEADER */
+  // Sections
 
   sectionHeader: {
     flexDirection: 'row',
@@ -1174,20 +1427,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-
+  sectionHeading: {
+    flex: 1,
+    paddingRight: 10,
+  },
   sectionTitle: {
     color: '#20352F',
     fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
-
   sectionSubtitle: {
     color: '#85827B',
     fontSize: 12,
     marginTop: 3,
   },
-
   plusButton: {
     width: 43,
     height: 43,
@@ -1198,14 +1452,14 @@ const styles = StyleSheet.create({
     shadowColor: '#67539B',
     shadowOpacity: 0.2,
     shadowRadius: 9,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
+  petListSection: {
+    marginBottom: 28,
+  },
 
-  /* QUICK ACTIONS */
+  // Quick actions
 
   quickActionsGrid: {
     flexDirection: 'row',
@@ -1213,7 +1467,6 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 16,
   },
-
   quickActionCard: {
     width: '48%',
     flexGrow: 1,
@@ -1223,7 +1476,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ECE8E0',
   },
-
   quickActionIcon: {
     width: 40,
     height: 40,
@@ -1232,20 +1484,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-
   quickActionTitle: {
     color: '#20352F',
     fontSize: 14,
     fontWeight: '800',
   },
-
   quickActionSubtitle: {
     color: '#85827B',
     fontSize: 10,
     marginTop: 3,
   },
 
-  /* TRACKING */
+  // Tracking
 
   trackingCard: {
     backgroundColor: '#FFFFFF',
@@ -1257,7 +1507,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 13,
   },
-
   trackingIcon: {
     width: 52,
     height: 52,
@@ -1267,32 +1516,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 13,
   },
-
   trackingContent: {
     flex: 1,
   },
-
   trackingLabel: {
     color: '#67539B',
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 1.2,
   },
-
   trackingTitle: {
     color: '#20352F',
     fontSize: 16,
     fontWeight: '800',
     marginTop: 3,
   },
-
   trackingDescription: {
     color: '#85827B',
     fontSize: 11,
     lineHeight: 16,
     marginTop: 3,
   },
-
   arrowCircle: {
     width: 35,
     height: 35,
@@ -1303,7 +1547,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  /* VACCINE */
+  // Vaccines and appointments
 
   vaccineCard: {
     backgroundColor: '#FFF7F3',
@@ -1314,7 +1558,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 28,
   },
-
   vaccineIcon: {
     width: 48,
     height: 48,
@@ -1324,59 +1567,67 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-
   vaccineContent: {
     flex: 1,
   },
-
   vaccineTopRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
   vaccineLabel: {
     color: '#E76F51',
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 1,
   },
-
   upcomingBadge: {
     backgroundColor: '#FBE1D8',
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 999,
   },
-
   upcomingText: {
     color: '#C65A3F',
     fontSize: 7,
     fontWeight: '900',
   },
-
   vaccineTitle: {
     color: '#20352F',
     fontSize: 15,
     fontWeight: '800',
     marginTop: 6,
   },
-
   vaccineDescription: {
     color: '#85827B',
     fontSize: 11,
     lineHeight: 17,
     marginTop: 3,
   },
-
   manageReminder: {
     color: '#E76F51',
     fontSize: 11,
     fontWeight: '800',
     marginTop: 8,
   },
+  textButton: {
+    paddingVertical: 10,
+  },
+  appointmentCard: {
+    backgroundColor: '#F0F5FC',
+    borderColor: '#DCE7F5',
+    marginBottom: 13,
+  },
+  appointmentIcon: {
+    backgroundColor: '#DFEAF8',
+  },
+  appointmentLabel: {
+    color: '#537CB0',
+  },
 
-  /* COMMUNITY */
+  // Community
 
   communityCard: {
     backgroundColor: '#E5F2EF',
@@ -1386,13 +1637,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 28,
   },
-
   communityIllustration: {
     width: 110,
     minHeight: 145,
     position: 'relative',
   },
-
   communityBubbleOne: {
     width: 66,
     height: 66,
@@ -1404,7 +1653,6 @@ const styles = StyleSheet.create({
     top: 8,
     left: 5,
   },
-
   communityBubbleTwo: {
     width: 57,
     height: 57,
@@ -1416,7 +1664,6 @@ const styles = StyleSheet.create({
     bottom: 10,
     right: 2,
   },
-
   communityBubbleThree: {
     width: 49,
     height: 49,
@@ -1428,80 +1675,115 @@ const styles = StyleSheet.create({
     top: 58,
     right: 12,
   },
-
   communityEmoji: {
     fontSize: 27,
   },
-
   communityContent: {
     flex: 1,
     paddingLeft: 3,
   },
-
   communityEyebrow: {
     color: '#3A8D8A',
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 1.1,
   },
-
   communityTitle: {
     color: '#20352F',
     fontSize: 19,
     fontWeight: '800',
     marginTop: 7,
   },
-
   communityDescription: {
     color: '#687B77',
     fontSize: 11,
     lineHeight: 17,
     marginTop: 6,
   },
-
   communityButton: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     marginTop: 12,
+    paddingVertical: 6,
   },
-
   communityButtonText: {
     color: '#67539B',
     fontSize: 11,
     fontWeight: '800',
   },
 
-  /* GUIDE */
+  // Care tips
+
+  tipCard: {
+    backgroundColor: '#FFF8E8',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#F1E5C9',
+    padding: 17,
+    marginBottom: 28,
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  tipHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  tipTitle: {
+    color: '#20352F',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  tipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  tipButtonText: {
+    color: '#67539B',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tipDescription: {
+    color: '#77736B',
+    fontSize: 12,
+    lineHeight: 19,
+  },
+
+  // Guides
 
   seeAll: {
     color: '#67539B',
     fontSize: 11,
     fontWeight: '800',
   },
-
   guideRow: {
     flexDirection: 'row',
     gap: 11,
     marginBottom: 20,
   },
-
   guideCard: {
     flex: 1,
     borderRadius: 22,
     padding: 15,
     minHeight: 190,
   },
-
   foodCard: {
     backgroundColor: '#FFF5DE',
   },
-
   lawsCard: {
     backgroundColor: '#E4F3F0',
   },
-
   guideIconFood: {
     width: 42,
     height: 42,
@@ -1511,7 +1793,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-
   guideIconLaw: {
     width: 42,
     height: 42,
@@ -1521,20 +1802,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
   },
-
   guideTitle: {
     color: '#20352F',
     fontSize: 15,
     fontWeight: '800',
   },
-
   guideDescription: {
     color: '#77736B',
     fontSize: 10,
     lineHeight: 16,
     marginTop: 5,
+    marginBottom: 14,
   },
-
   guideArrow: {
     color: '#67539B',
     fontSize: 10,
@@ -1542,7 +1821,7 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
   },
 
-  /* RESCUE / HELP */
+  // Community banner
 
   rescueBanner: {
     backgroundColor: '#67539B',
@@ -1552,7 +1831,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 18,
   },
-
   rescueIcon: {
     width: 47,
     height: 47,
@@ -1562,17 +1840,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-
   rescueContent: {
     flex: 1,
   },
-
   rescueTitle: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
   },
-
   rescueDescription: {
     color: '#E9E4F4',
     fontSize: 10,
@@ -1580,7 +1855,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  /* AI INFO */
+  // AI information
 
   aiInfoCard: {
     backgroundColor: '#FFFFFF',
@@ -1591,7 +1866,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   aiIcon: {
     width: 47,
     height: 47,
@@ -1601,24 +1875,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-
   aiSparkle: {
     color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '800',
   },
-
   aiText: {
     flex: 1,
   },
-
   aiTitle: {
     color: '#67539B',
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
   },
-
   aiDescription: {
     color: '#85827B',
     fontSize: 11,
@@ -1626,38 +1896,26 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  /* FLOATING AI */
+  // Floating AI button
 
   aiFloatingButton: {
     position: 'absolute',
     left: 22,
     bottom: 96,
-
     width: 61,
     height: 61,
-
     borderRadius: 31,
-
     backgroundColor: '#67539B',
-
     alignItems: 'center',
     justifyContent: 'center',
-
     shadowColor: '#67539B',
-    shadowOpacity: 0.30,
+    shadowOpacity: 0.3,
     shadowRadius: 14,
-
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-
+    shadowOffset: { width: 0, height: 6 },
     elevation: 10,
-
     borderWidth: 3,
     borderColor: '#FFFFFF',
   },
-
   aiFloatingInner: {
     width: 43,
     height: 43,
@@ -1666,37 +1924,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   aiFloatingSparkle: {
     color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '800',
   },
-
-  aiOnlineDot: {
-    position: 'absolute',
-    right: 1,
-    top: 1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#55C878',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-
   aiFloatingPressed: {
-    transform: [
-      {
-        scale: 0.94,
-      },
-    ],
+    transform: [{ scale: 0.94 }],
   },
-
   pressed: {
     opacity: 0.75,
   },
-
   bottomSpace: {
     height: 80,
   },

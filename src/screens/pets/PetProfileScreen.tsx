@@ -80,9 +80,9 @@ export default function PetProfileScreen({ route, navigation }: Props) {
       edges={['left', 'right', 'bottom']}
     >
       <ScrollView
-  contentContainerStyle={styles.scrollContent}
-  keyboardShouldPersistTaps="handled"
->
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.content}>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>PET PROFILE</Text>
@@ -129,6 +129,19 @@ export default function PetProfileScreen({ route, navigation }: Props) {
 
           <PetVaccinations key={pet.id} petId={pet.id} />
 
+          <View style={{ marginBottom: 20 }}>
+            <AppButton
+              title="Manage appointments"
+              disabled={deleting}
+              onPress={() =>
+                navigation.navigate('Appointments', {
+                  petId: pet.id,
+                  petName: pet.name,
+                })
+              }
+            />
+          </View>
+          
           <View style={{ marginBottom: 12 }}>
             <AppButton title="Delete pet" variant="secondary" onPress={confirmDelete}
               loading={deleting} disabled={deleting} />
