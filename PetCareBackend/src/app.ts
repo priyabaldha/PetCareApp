@@ -6,6 +6,12 @@ import sessionRouter from './routes/sessions.ts';
 import petRouter from './routes/pets.ts';
 import vaccinationRouter from './routes/vaccinations.ts';
 import appointmentRouter from './routes/appointments.ts';
+import healthRecordRouter from './routes/healthRecords.ts';
+import medicationRouter from './routes/medications.ts';
+import adminRouter from './routes/admin.ts';
+import vetApplicationRouter from './routes/vetApplications.ts';
+import guidesRouter from './routes/guides.ts';
+import announcementsRouter from './routes/announcements.ts';
 
 const app = express();
 
@@ -17,6 +23,12 @@ app.use('/api/auth', sessionRouter);
 app.use('/api/pets', petRouter);
 app.use('/api/pets', vaccinationRouter);
 app.use('/api/pets', appointmentRouter);
+app.use('/api/pets', healthRecordRouter);
+app.use('/api/pets', medicationRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/vet-applications', vetApplicationRouter);
+app.use('/api/guides', guidesRouter);
+app.use('/api/announcements', announcementsRouter);
 
 app.get('/api/health', async (_request, response) => {
   response.setHeader('Cache-Control', 'no-store');

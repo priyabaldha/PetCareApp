@@ -22,13 +22,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { listPets } from '../../services/pets';
 import { listVaccinations } from '../../services/vaccinations';
-
 import {
   getVaccineReminders,
   getVaccineDueStatus,
 } from '../../utils/vaccinationSummary';
-
 import { useAppointmentSummary } from '../../hooks/useAppointmentSummary';
+import VetApplicationPanel from '../../components/VetApplicationPanel';
 
 interface ProfileScreenProps {
   onLoggedOut: () => void;
@@ -239,6 +238,7 @@ export default function ProfileScreen({ onLoggedOut }: ProfileScreenProps) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
       >
 
         {/* HEADER */}
@@ -523,7 +523,7 @@ export default function ProfileScreen({ onLoggedOut }: ProfileScreenProps) {
           </View>
         ) : null}
 
-        <Text style={{ color: '#929087', fontSize: 10, marginTop: 8 }}>
+        <View style={{ marginTop: 8 }}>
           {appointments.loading ? (
             <Text style={{ color: '#929087', fontSize: 12, marginTop: 12 }}>
               Loading appointments…
@@ -565,12 +565,17 @@ export default function ProfileScreen({ onLoggedOut }: ProfileScreenProps) {
                   : 'Open a pet’s profile to manage visits or view appointment history.'}
               </Text>
             </View>
-          )}</Text>
+          )}</View>
 
         {!!petCount.error && <Pressable onPress={petCount.refresh} accessibilityRole="button" style={{ paddingVertical: 12 }}>
           <Text style={{ color: '#C45B45', fontSize: 11 }}>Could not load pet count. Tap to retry.</Text>
         </Pressable>}
-
+                  {user && (
+          <VetApplicationPanel
+            key={user.id}
+            disabled={loggingOut || savingName}
+          />
+        )}
         {/* SETTINGS */}
 
         <Text style={styles.sectionTitle}>

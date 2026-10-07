@@ -8,23 +8,19 @@ import {
   type Theme,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
 import { colors } from '../constants/theme';
-
 import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 import SplashScreen from '../screens/onboarding/SplashScreen';
-
 import AddPetScreen from '../screens/pets/AddPetScreen';
 import EditPetScreen from '../screens/pets/EditPetScreen';
 import PetProfileScreen from '../screens/pets/PetProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
 import AppointmentsScreen from '../screens/appointments/AppointmentsScreen';
-
 import type { RootStackParamList } from '../types/navigation';
-
 import AuthNavigator from './AuthNavigator';
 import MainTabNavigator from './MainTabNavigator';
+import RoleGate from '../components/RoleGate';
 
 const Stack =
   createNativeStackNavigator<RootStackParamList>();
@@ -201,6 +197,7 @@ export default function RootNavigator() {
             }
           />
         ) : (
+          <RoleGate onLoggedOut={handleLoggedOut}>
           <Stack.Navigator
             screenOptions={{
               headerStyle: {
@@ -273,6 +270,7 @@ export default function RootNavigator() {
             />
 
           </Stack.Navigator>
+          </RoleGate>
         )}
       </NavigationContainer>
     </>

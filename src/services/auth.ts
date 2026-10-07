@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 // Copy the SAME working address used in SignupScreen.tsx. No /api/health suffix.
-const API_BASE_URL = 'http://192.168.1.11:4000';
+export const API_BASE_URL = 'http://192.168.1.11:4000';
 const TOKEN_KEY = 'jeeva.session.v1';
 
 class ApiError extends Error {

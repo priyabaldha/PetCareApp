@@ -67,6 +67,15 @@ sessionRouter.post('/login', loginLimiter, async (request, response) => {
     response.status(401).json({ success: false, message: 'Incorrect email or password.' });
     return;
   }
+  if (user.isSuspended) {
+    response.status(403).json({
+      success: false,
+      message: user.suspendedReason
+        ? `Your account has been suspended: ${user.suspendedReason}`
+        : 'Your account has been suspended. Please contact support.',
+    });
+    return;
+  }
   const token = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await sessions.insertOne({ tokenHash: digest(token), userId: user._id, createdAt: new Date(), expiresAt });
@@ -87,6 +96,15 @@ sessionRouter.get('/me', async (request, response) => {
   const user = session ? await usersCollection.findOne({ _id: session.userId }) : null;
   if (!session || !user) {
     response.status(401).json({ success: false, message: 'Your session has expired. Sign in again.' });
+    return;
+  }
+  if (user.isSuspended) {
+    response.status(403).json({
+      success: false,
+      message: user.suspendedReason
+        ? `Your account has been suspended: ${user.suspendedReason}`
+        : 'Your account has been suspended. Please contact support.',
+    });
     return;
   }
   response.json({ success: true, user: {

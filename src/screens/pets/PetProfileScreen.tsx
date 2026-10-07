@@ -10,7 +10,8 @@ import { deletePet } from '../../services/pets';
 import { colors } from '../../constants/theme';
 import type { RootStackParamList } from '../../types/navigation';
 import PetVaccinations from '../../components/PetVaccinations';
-
+import PetHealthRecords from '../../components/PetHealthRecords';
+import PetMedications from '../../components/PetMedications';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PetProfile'>;
 
@@ -33,10 +34,12 @@ export default function PetProfileScreen({ route, navigation }: Props) {
     navigation.goBack();
   }
   function confirmDelete() {
-    Alert.alert('Delete pet?', `Remove ${pet?.name ?? 'this pet'} from your account? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(
+      'Delete pet?',
+      `Remove ${pet?.name ?? 'this pet'} and their vaccination, appointment, health and medication records? This cannot be undone.`,
+      [{ text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => { void removePet(); } },
-    ]);
+      ]);
   }
 
   if (!pet) {
@@ -129,6 +132,18 @@ export default function PetProfileScreen({ route, navigation }: Props) {
 
           <PetVaccinations key={pet.id} petId={pet.id} />
 
+          <PetHealthRecords
+            key={`health-${pet.id}`}
+            petId={pet.id}
+            petName={pet.name}
+            disabled={deleting}
+          />
+          <PetMedications
+            key={`medications-${pet.id}`}
+            petId={pet.id}
+            petName={pet.name}
+            disabled={deleting}
+          />
           <View style={{ marginBottom: 20 }}>
             <AppButton
               title="Manage appointments"
@@ -141,7 +156,7 @@ export default function PetProfileScreen({ route, navigation }: Props) {
               }
             />
           </View>
-          
+
           <View style={{ marginBottom: 12 }}>
             <AppButton title="Delete pet" variant="secondary" onPress={confirmDelete}
               loading={deleting} disabled={deleting} />

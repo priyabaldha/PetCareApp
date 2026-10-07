@@ -23,6 +23,7 @@ export async function listPets(): Promise<Pet[]> {
   if (!Array.isArray(data.pets)) throw new Error('Invalid pet list response.');
   return data.pets.map(parsePet);
 }
+
 export async function getPetCount(): Promise<number> {
   const data = await authenticatedRequest('/api/pets/count');
   if (typeof data.count !== 'number' || !Number.isInteger(data.count) || data.count < 0) throw new Error('Invalid pet count.');
