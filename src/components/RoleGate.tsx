@@ -24,6 +24,7 @@ import {
 import type { AuthUser } from '../services/auth';
 
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import VetDashboardScreen from '../screens/vet/VetDashboardScreen';
 
 interface Props {
   children: ReactNode;
@@ -39,6 +40,7 @@ export default function RoleGate({
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [vetOwnerMode, setVetOwnerMode] = useState(false);
 
   const mounted = useRef(false);
   const logoutBusy = useRef(false);
@@ -179,23 +181,42 @@ export default function RoleGate({
   }
 
   if (user.role === 'vet') {
-    return (
-      <SafeAreaView style={styles.screen}>
-        <Text style={styles.title}>Hello, {user.name}</Text>
-        <Text style={styles.message}>
-          Your account has the Vet role. The Vet dashboard is
-          coming next.
-        </Text>
-        <View style={styles.buttonSpace}>
-          <Button
-            title={loggingOut ? 'Signing out…' : 'Sign out'}
-            disabled={loggingOut}
-            onPress={() => {
-              void signOut();
+    if (vetOwnerMode) {
+      return (
+        <Fragment key={`${user.id}:vet-personal`}>
+          <SafeAreaView
+            edges={['top']}
+            style={{
+              backgroundColor: '#71579C',
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
-          />
-        </View>
-      </SafeAreaView>
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>
+              🐾 Personal Pet Mode (Dr. {user.name})
+            </Text>
+            <Button
+              title="Return to Vet Practice"
+              color="#FFFFFF"
+              onPress={() => setVetOwnerMode(false)}
+            />
+          </SafeAreaView>
+          {children}
+        </Fragment>
+      );
+    }
+
+    return (
+      <VetDashboardScreen
+        key={user.id}
+        user={user}
+        onLoggedOut={onLoggedOut}
+        onRecheckRole={recheck}
+        onSwitchToOwnerMode={() => setVetOwnerMode(true)}
+      />
     );
   }
 

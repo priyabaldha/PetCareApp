@@ -19,6 +19,12 @@ import {
   fetchPublicAnnouncements,
   type PublicAnnouncement,
 } from '../../services/announcements';
+import {
+  fetchInAppNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  type InAppNotification,
+} from '../../services/notifications';
 
 import { useCareReminders } from '../../hooks/useCareReminders';
 import type {
@@ -114,14 +120,52 @@ export default function NotificationsScreen({
 
   const [filter, setFilter] = useState<Filter>('all');
   const [announcements, setAnnouncements] = useState<PublicAnnouncement[]>([]);
+  const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
+  const [unreadInAppCount, setUnreadInAppCount] = useState(0);
+
+  const loadInApp = async () => {
+    try {
+      const res = await fetchInAppNotifications();
+      setInAppNotifications(res.notifications);
+      setUnreadInAppCount(res.unreadCount);
+    } catch {
+      // Non-blocking
+    }
+  };
 
   useEffect(() => {
     void fetchPublicAnnouncements().then(setAnnouncements);
+    void loadInApp();
   }, []);
 
   const handleFullRefresh = () => {
     refresh();
     void fetchPublicAnnouncements().then(setAnnouncements);
+    void loadInApp();
+  };
+
+  const handleInAppPress = async (item: InAppNotification) => {
+    if (!item.isRead) {
+      void markNotificationAsRead(item.id);
+      setInAppNotifications((prev) =>
+        prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
+      );
+      setUnreadInAppCount((prev) => Math.max(0, prev - 1));
+    }
+
+    if (item.data?.bookingId) {
+      navigation.navigate('Appointments');
+    } else if (item.data?.petId && typeof item.data.petId === 'string') {
+      navigation.navigate('PetProfile', { petId: item.data.petId });
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsAsRead();
+      setInAppNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadInAppCount(0);
+    } catch {}
   };
 
   const visible = reminders.filter(
@@ -240,6 +284,86 @@ export default function NotificationsScreen({
                   <Text style={styles.announcementBody}>{ann.content}</Text>
                 </View>
               ))}
+            </View>
+          )}
+
+          {/* IN-APP ACTIVITY & VISIT NOTIFICATIONS */}
+          {inAppNotifications.length > 0 && (
+            <View style={styles.inAppSection}>
+              <View style={styles.inAppSectionHeader}>
+                <View style={styles.inAppTitleRow}>
+                  <Ionicons name="notifications" size={16} color="#67539B" />
+                  <Text style={styles.inAppSectionTitle}>Activity & Clinic Updates</Text>
+                  {unreadInAppCount > 0 && (
+                    <View style={styles.inAppUnreadBadge}>
+                      <Text style={styles.inAppUnreadBadgeText}>{unreadInAppCount} new</Text>
+                    </View>
+                  )}
+                </View>
+                {unreadInAppCount > 0 && (
+                  <Pressable onPress={handleMarkAllRead} style={styles.markAllReadBtn}>
+                    <Text style={styles.markAllReadText}>Mark all read</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {inAppNotifications.map((notif) => {
+                const getIconInfo = (type: string) => {
+                  if (type.startsWith('booking_') || type.startsWith('reschedule_')) {
+                    if (type === 'booking_confirmed' || type === 'reschedule_accepted') {
+                      return { icon: 'checkmark-circle' as const, color: '#39745D', bg: '#E4EFE8' };
+                    }
+                    if (type === 'booking_rejected' || type === 'booking_cancelled' || type === 'reschedule_declined') {
+                      return { icon: 'close-circle' as const, color: '#C45B45', bg: '#FFE3DF' };
+                    }
+                    return { icon: 'calendar' as const, color: '#7057A5', bg: '#E8E0F5' };
+                  }
+                  if (type === 'consultation_published') {
+                    return { icon: 'document-text' as const, color: '#3A8D8A', bg: '#E2F3F1' };
+                  }
+                  if (type === 'prescription_added') {
+                    return { icon: 'medkit' as const, color: '#4D8A68', bg: '#E1F1E8' };
+                  }
+                  if (type === 'vaccination_recorded') {
+                    return { icon: 'shield-checkmark' as const, color: '#D49A3A', bg: '#FBF0DA' };
+                  }
+                  return { icon: 'information-circle' as const, color: '#67539B', bg: '#EEE9FA' };
+                };
+
+                const iconInfo = getIconInfo(notif.type);
+
+                return (
+                  <Pressable
+                    key={notif.id}
+                    onPress={() => handleInAppPress(notif)}
+                    style={[
+                      styles.inAppCard,
+                      !notif.isRead && styles.inAppCardUnread,
+                    ]}
+                  >
+                    <View style={[styles.inAppIconWrap, { backgroundColor: iconInfo.bg }]}>
+                      <Ionicons name={iconInfo.icon} size={20} color={iconInfo.color} />
+                    </View>
+                    <View style={styles.inAppBody}>
+                      <View style={styles.inAppCardHeader}>
+                        <Text style={[styles.inAppCardTitle, !notif.isRead && styles.inAppCardTitleUnread]}>
+                          {notif.title}
+                        </Text>
+                        {!notif.isRead && <View style={styles.unreadDot} />}
+                      </View>
+                      <Text style={styles.inAppCardMessage}>{notif.message}</Text>
+                      <Text style={styles.inAppCardDate}>
+                        {new Date(notif.createdAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -992,5 +1116,108 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#655474',
     lineHeight: 16,
+  },
+
+  // In-App Notifications
+  inAppSection: {
+    marginBottom: 18,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ECE8E0',
+    padding: 14,
+  },
+  inAppSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  inAppTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inAppSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#20352F',
+  },
+  inAppUnreadBadge: {
+    backgroundColor: '#67539B',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  inAppUnreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  markAllReadBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  markAllReadText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#71579C',
+  },
+  inAppCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: '#FAF9F6',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F0EEE8',
+  },
+  inAppCardUnread: {
+    backgroundColor: '#F5F2FB',
+    borderColor: '#DFD7EC',
+  },
+  inAppIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inAppBody: {
+    flex: 1,
+  },
+  inAppCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  inAppCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#463D5D',
+  },
+  inAppCardTitleUnread: {
+    fontWeight: '800',
+    color: '#20352F',
+  },
+  unreadDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#67539B',
+  },
+  inAppCardMessage: {
+    fontSize: 11,
+    color: '#7B746E',
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  inAppCardDate: {
+    fontSize: 9,
+    color: '#AAA59C',
+    fontWeight: '600',
   },
 });

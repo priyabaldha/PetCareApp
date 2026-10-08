@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -59,10 +59,10 @@ type HomeVaccineReminder = Vaccination & {
 
 const quickActions: QuickAction[] = [
   {
-    id: 'track',
-    title: 'Track pet',
-    subtitle: 'Coming soon',
-    icon: 'location',
+    id: 'findVet',
+    title: 'Find Vet',
+    subtitle: 'Book consultation',
+    icon: 'medkit',
     color: '#67539B',
     background: '#EEE9FA',
   },
@@ -338,11 +338,8 @@ export default function HomeScreen({ navigation }: Props) {
 
   function handleQuickAction(id: string) {
     switch (id) {
-      case 'track':
-        Alert.alert(
-          'Tracking · Coming soon',
-          'Live pet tracking is not available yet.',
-        );
+      case 'findVet':
+        navigation.navigate('FindVet');
         break;
 
       case 'appointment':

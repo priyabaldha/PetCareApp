@@ -108,4 +108,88 @@ petRouter.delete('/:petId', async (request, response) => {
   response.json({ success: true });
 });
 
+// Owner endpoint: View finalized Vet-authored consultations for this pet
+petRouter.get('/:petId/consultations', async (request, response) => {
+  const petId = new ObjectId(String(request.params.petId));
+  const ownerId = response.locals.userId as ObjectId;
+
+  const pet = await petsCollection.findOne({ _id: petId, ownerId });
+  if (!pet) {
+    response.status(404).json({ success: false, message: 'Pet not found.' });
+    return;
+  }
+
+  const records = await database
+    .collection('consultations')
+    .find({ petId, ownerId, status: 'finalized' })
+    .sort({ visitDate: -1, createdAt: -1 })
+    .toArray();
+
+  response.json({
+    success: true,
+    consultations: records.map((r) => ({
+      id: r._id.toHexString(),
+      bookingId: r.bookingId ? r.bookingId.toHexString() : null,
+      petId: r.petId.toHexString(),
+      vetId: r.vetId.toHexString(),
+      vetName: r.vetName,
+      clinicName: r.clinicName,
+      visitDate: r.visitDate,
+      symptoms: r.symptoms,
+      examinationNotes: r.examinationNotes || '',
+      diagnosis: r.diagnosis,
+      treatmentPlan: r.treatmentPlan,
+      followUpDate: r.followUpDate || null,
+      followUpInstructions: r.followUpInstructions || '',
+      status: r.status,
+      amendments: r.amendments
+        ? r.amendments.map((a: any) => ({
+            amendedAt: a.amendedAt instanceof Date ? a.amendedAt.toISOString() : a.amendedAt,
+            note: a.note,
+          }))
+        : [],
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    })),
+  });
+});
+
+// Owner endpoint: View Vet-authored prescriptions for this pet
+petRouter.get('/:petId/prescriptions', async (request, response) => {
+  const petId = new ObjectId(String(request.params.petId));
+  const ownerId = response.locals.userId as ObjectId;
+
+  const pet = await petsCollection.findOne({ _id: petId, ownerId });
+  if (!pet) {
+    response.status(404).json({ success: false, message: 'Pet not found.' });
+    return;
+  }
+
+  const records = await database
+    .collection('prescriptions')
+    .find({ petId, ownerId })
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  response.json({
+    success: true,
+    prescriptions: records.map((r) => ({
+      id: r._id.toHexString(),
+      consultationId: r.consultationId ? r.consultationId.toHexString() : null,
+      petId: r.petId.toHexString(),
+      vetId: r.vetId.toHexString(),
+      vetName: r.vetName,
+      clinicName: r.clinicName,
+      medicineName: r.medicineName,
+      dosage: r.dosage,
+      route: r.route,
+      frequency: r.frequency,
+      startDate: r.startDate,
+      endDate: r.endDate || null,
+      instructions: r.instructions,
+      status: r.status,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    })),
+  });
+});
+
 export default petRouter;

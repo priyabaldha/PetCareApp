@@ -12,12 +12,16 @@ import type { RootStackParamList } from '../../types/navigation';
 import PetVaccinations from '../../components/PetVaccinations';
 import PetHealthRecords from '../../components/PetHealthRecords';
 import PetMedications from '../../components/PetMedications';
+import PetVetConsultations from '../../components/PetVetConsultations';
+import PetVetPrescriptions from '../../components/PetVetPrescriptions';
+import PetRecordSharingModal from '../../components/PetRecordSharingModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PetProfile'>;
 
 export default function PetProfileScreen({ route, navigation }: Props) {
   const { data: pet, loading, error, refresh } = usePet(route.params.petId);
   const [deleting, setDeleting] = useState(false);
+  const [sharingModalOpen, setSharingModalOpen] = useState(false);
   const busy = useRef(false);
   async function removePet(): Promise<void> {
     if (busy.current) return;
@@ -144,6 +148,20 @@ export default function PetProfileScreen({ route, navigation }: Props) {
             petName={pet.name}
             disabled={deleting}
           />
+
+          <PetVetConsultations petId={pet.id} />
+
+          <PetVetPrescriptions petId={pet.id} />
+
+          <View style={{ marginBottom: 12 }}>
+            <AppButton
+              title="Manage Medical Record Sharing"
+              variant="secondary"
+              disabled={deleting}
+              onPress={() => setSharingModalOpen(true)}
+            />
+          </View>
+
           <View style={{ marginBottom: 20 }}>
             <AppButton
               title="Manage appointments"
@@ -169,6 +187,13 @@ export default function PetProfileScreen({ route, navigation }: Props) {
           />
         </View>
       </ScrollView>
+
+      <PetRecordSharingModal
+        visible={sharingModalOpen}
+        petId={pet.id}
+        petName={pet.name}
+        onClose={() => setSharingModalOpen(false)}
+      />
     </SafeAreaView>
   );
 }

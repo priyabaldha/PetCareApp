@@ -7,11 +7,14 @@ import {
 import { initializeSessions } from './routes/sessions.ts';
 import { createPetIndexes } from './models/pet.ts';
 import { createAuditLogIndexes } from './models/auditLog.ts';
-import {
-  createGuideIndexes,
-  initializeGuides,
-} from './models/guide.ts';
+import { createGuideIndexes, initializeGuides } from './models/guide.ts';
 import { createAnnouncementIndexes } from './models/announcement.ts';
+import { createVetProfileIndexes } from './models/vetProfile.ts';
+import { createVetBookingIndexes } from './models/vetBooking.ts';
+import { createPetAccessGrantIndexes } from './models/petAccessGrant.ts';
+import { createConsultationIndexes } from './models/consultation.ts';
+import { createPrescriptionIndexes } from './models/prescription.ts';
+import { createNotificationIndexes } from './models/notification.ts';
 
 const PORT = 4000;
 const HOST = '0.0.0.0';
@@ -26,6 +29,12 @@ async function startServer(): Promise<void> {
     await createGuideIndexes();
     await initializeGuides();
     await createAnnouncementIndexes();
+    await createVetProfileIndexes();
+    await createVetBookingIndexes();
+    await createPetAccessGrantIndexes();
+    await createConsultationIndexes();
+    await createPrescriptionIndexes();
+    await createNotificationIndexes();
 
     const server = app.listen(PORT, HOST, () => {
       console.log(`JEEVA backend is listening on port ${PORT}`);

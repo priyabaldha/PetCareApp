@@ -17,6 +17,7 @@ import PetProfileScreen from '../screens/pets/PetProfileScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
 import AppointmentsScreen from '../screens/appointments/AppointmentsScreen';
+import FindVetScreen from '../screens/vets/FindVetScreen';
 import type { RootStackParamList } from '../types/navigation';
 import AuthNavigator from './AuthNavigator';
 import MainTabNavigator from './MainTabNavigator';
@@ -267,6 +268,12 @@ export default function RootNavigator() {
               name="Appointments"
               component={AppointmentsScreen}
               options={{ title: 'Appointments' }}
+            />
+
+            <Stack.Screen
+              name="FindVet"
+              component={FindVetScreen}
+              options={{ headerShown: false }}
             />
 
           </Stack.Navigator>

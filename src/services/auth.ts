@@ -136,7 +136,7 @@ async function expirePetSession(): Promise<never> {
 
 export async function authenticatedRequest(
   path: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'GET',
   body?: object,
 ): Promise<Record<string, unknown>> {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);

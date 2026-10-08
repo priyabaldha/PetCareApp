@@ -41,7 +41,9 @@ export type RootStackParamList = {
     petId: string;
   };
 
-  Appointments: { petId: string; petName: string };
+  Appointments: { petId?: string; petName?: string } | undefined;
 
   Notifications: undefined;
+
+  FindVet: undefined;
 };
